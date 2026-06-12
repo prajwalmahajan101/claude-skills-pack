@@ -1,0 +1,52 @@
+{
+  "_comment": "Merge these hook entries into ~/.claude/settings.json under the existing 'hooks' key. Preserve any other hooks already present. install.sh does this safely with jq.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/sb-session-start.js\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/sb-capture.js\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/sb-capture.js\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/sb-session-end.js\"", "timeout": 15 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/hooks/sb-prompt-watch.js\"", "timeout": 3 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$HOME/.claude/hooks/sb-plan-mirror.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
