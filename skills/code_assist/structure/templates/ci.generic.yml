@@ -1,0 +1,14 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint / build / test
+        run: |
+          echo "Wire this to your project: lint, type-check, test."
+          make ci || echo "define a 'ci' make target"

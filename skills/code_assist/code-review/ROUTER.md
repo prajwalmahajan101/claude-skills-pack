@@ -8,6 +8,17 @@ type: router
 
 Pick the right variant(s) and load them. Do not duplicate review logic here.
 
+## Optional pre-pass (static analysis + blast radius)
+
+Before scoring, when configured, gather deterministic signal to fold into Step 3's detection
+checklist (treat security findings as blocking, style as informational):
+
+- `node bin/ca-tools.js scan sonar` — SonarQube open issues (needs `SONAR_*` env; no-op otherwise).
+- `node bin/ca-tools.js graph detect-changes` / `graph impact <symbol>` — map the diff to
+  affected symbols/flows and size blast radius (needs gitnexus; skip if absent).
+
+These are inputs, not a replacement for the architectural review.
+
 ## Step 0: Targeted Review Shortcut
 
 If the user's message contains any of: "review my changes", "review this PR", "review the pr", "review last commit", "review staged", "review diff" → **skip stack detection entirely**. Load only `shared.md` and follow the *Targeted Review* path. No weighting, no living docs.
