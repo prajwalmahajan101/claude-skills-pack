@@ -76,6 +76,12 @@ const DIR = {
   reviews:      "07_Reviews",
   insights:     "08_Insights",
   exports:      "09_Exports",
+  memory:       "10_Memory",       // mirror of the harness file-memory facts (see lib/memory-bridge.js)
+  decisions:    "11_Decisions",    // ADR / decision notes (see commands/_runners/decision.js)
+  people:       "12_People",       // people / CRM notes (see commands/_runners/person.js)
+  meetings:     "13_Meetings",     // meeting notes (see commands/_runners/meeting.js)
+  zettel:       "14_Zettelkasten", // atomic permanent notes (see commands/_runners/zettel.js)
+  habits:       "15_Habits",       // habit tracker notes (see commands/_runners/habit.js)
   inbox:        "99_Inbox",
   templates:    "_templates",
   assets:       "_assets",
@@ -96,6 +102,12 @@ const TYPE_MAP = {
   "07_Reviews": "reviews",
   "08_Insights": "insights",
   "09_Exports": "exports",
+  "10_Memory": "memory",
+  "11_Decisions": "decisions",
+  "12_People": "people",
+  "13_Meetings": "meetings",
+  "14_Zettelkasten": "zettel",
+  "15_Habits": "habits",
   "99_Inbox": "inbox",
   // legacy flat layout aliases (pre-migration)
   "dashboard":"dashboard","conversations":"conversations","projects":"projects",
@@ -134,6 +146,12 @@ function paths(projectSlug) {
     insights: path.join(VAULT, DIR.insights),
     insightsMoc: path.join(VAULT, DIR.insights, "recurring-themes.md"),
     exports: path.join(VAULT, DIR.exports),
+    memory: path.join(VAULT, DIR.memory),
+    decisions: path.join(VAULT, DIR.decisions),
+    people: path.join(VAULT, DIR.people),
+    meetings: path.join(VAULT, DIR.meetings),
+    zettel: path.join(VAULT, DIR.zettel),
+    habits: path.join(VAULT, DIR.habits),
     templates: path.join(VAULT, DIR.templates),
     assets: path.join(VAULT, DIR.assets),
     scribble: path.join(VAULT, DIR.scribble),
@@ -152,7 +170,8 @@ function ensureDirs(projectSlug) {
     p.dashboard, p.conversations, p.project, p.projectPlans, p.projectTasks,
     p.lessons, p.tasks, p.topics, p.connections, p.inbox,
     p.reviews, p.reviewsDaily, p.reviewsWeekly,
-    p.insights, p.exports,
+    p.insights, p.exports, p.memory, p.decisions,
+    p.people, p.meetings, p.zettel, p.habits,
     p.templates, p.assets, p.scribble, p.meta,
   ]) {
     fs.mkdirSync(d, { recursive: true });

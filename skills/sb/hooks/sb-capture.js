@@ -66,6 +66,7 @@ async function main() {
 
   if (isNew) {
     const front = {
+      type: "conversation",
       session_id: sessionId,
       title: metadata.title || "(untitled session)",
       project: slug,

@@ -11,6 +11,31 @@ const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { ensureDirs, projectSlugFromCwd, paths, readSessionMap, writeSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 const { updateFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 
+// Optional bridges to the external memory systems (best-effort; absent-safe).
+let listFacts = () => [];
+let recentHighlights = () => [];
+try { ({ listFacts } = require(path.join(SKILL_LIB, "memory-bridge.js"))); } catch {}
+try { ({ recentHighlights } = require(path.join(SKILL_LIB, "remember-bridge.js"))); } catch {}
+
+function memoryRememberSection() {
+  let facts = [], highlights = [];
+  try { facts = listFacts().slice(0, 5); } catch {}
+  try { highlights = recentHighlights(3); } catch {}
+  if (!facts.length && !highlights.length) return "";
+  const lines = ["", "## Memory & Remember", ""];
+  if (facts.length) {
+    lines.push("**Harness memory facts:**");
+    for (const f of facts) lines.push(`- ${f.slug} — ${f.description || ""}`.trimEnd());
+    lines.push("");
+  }
+  if (highlights.length) {
+    lines.push("**Recently (from ~/.remember):**");
+    for (const h of highlights) lines.push(`- ${h.slice(0, 120)}`);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
 const STALE_MS = 24 * 3600 * 1000;
 const CLEAR_WINDOW_MS = 5 * 60 * 1000;
 
@@ -99,7 +124,7 @@ ls plans/
 
 ## Conversations
 Stored under \`../../conversations/${slug}/\`.
-`;
+${memoryRememberSection()}`;
 }
 
 function kanbanTemplate(slug) {

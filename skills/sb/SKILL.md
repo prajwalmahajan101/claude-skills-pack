@@ -1,6 +1,6 @@
 ---
 name: sb
-description: "Second-brain skill — captures every Claude Code conversation into the ai-mind Obsidian vault, scoped by project (cwd). Use proactively when the user mentions 'lesson', 'topic note', 'kanban', 'tasks', 'second brain', 'remember this', or asks about past conversations / decisions / action items. Subcommands: /sb:status /sb:analyze /sb:lesson /sb:topic /sb:tasks /sb:task /sb:kanban /sb:connect /sb:tag /sb:search /sb:project /sb:backfill."
+description: "Second-brain skill — captures every Claude Code conversation into the ai-mind Obsidian vault, scoped by project (cwd). Use proactively when the user mentions 'lesson', 'topic note', 'kanban', 'tasks', 'second brain', 'remember this', or asks about past conversations / decisions / action items. Subcommands: /sb:status /sb:analyze /sb:lesson /sb:topic /sb:tasks /sb:task /sb:kanban /sb:connect /sb:tag /sb:search /sb:project /sb:backfill /sb:consolidate /sb:health /sb:bases."
 trigger: /sb
 ---
 
@@ -17,6 +17,10 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 - **Connects** notes across projects (tag overlap + keyword similarity).
 - **Topic notes** for evergreen reference (CRUD, observability, k8s, etc.).
 - **Auto-tags** notes from rules + LLM suggestions.
+- **AI-first notes** — lessons/topics carry a `## For future Claude` preamble + `ai-first: true`; a non-blocking Write/Edit validator warns on notes that miss it.
+- **Self-maintenance** — `/sb:consolidate` dedupes lessons, archives stale conversations, and promotes durable lessons to memory (manual, dry-run by default); `/sb:health` audits the vault.
+- **Obsidian Bases** — `/sb:bases` generates database views (Lessons, Projects, Conversations, Tasks, Memory) in `00_Dashboard/`.
+- **External memory bridges** — promotes durable lessons into the harness file-memory (`~/.claude/projects/.../memory`) and logs activity to the `~/.remember` rolling history; new-session INDEX surfaces both.
 
 ## Subcommands
 
@@ -35,6 +39,27 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 | `/sb:search <query>` | Vault full-text search via Obsidian CLI |
 | `/sb:project [<slug>]` | List projects / show project INDEX |
 | `/sb:backfill [--days N\|--all]` | Import historical conversations |
+| `/sb:consolidate [--apply]` | Dedupe lessons, archive stale convos, promote durable→memory, import global lessons (dry-run unless `--apply`) |
+| `/sb:health [--json]` | Read-only vault audit (orphans, duplicates, stale tasks, malformed frontmatter) |
+| `/sb:bases` | (Re)generate Obsidian Bases views into `00_Dashboard/` |
+| `/sb:sync-project [--all\|--repo <p>]` | Mirror a repo's `.journal/` + `.code_review/` into `02_Projects/<slug>/{journal,reviews}` + surface open issues |
+| `/sb:decision "<title>" [--from-council]` | Capture an ADR (Context/Decision/Consequences/Usage) into `02_Projects/<slug>/decisions` + global `11_Decisions` |
+| `/sb:lessons-import [--push]` | Import `~/.claude/lessons` into the vault; `--push` writes sb lessons back to the global INDEX |
+| `/sb:graph [--project <slug>]` | Build a knowledge graph via graphify + mirror `graphify-out/` into `09_Exports/graph` |
+| `/sb:zettel "<claim>"` | Atomic permanent Zettelkasten note (claim-title, related/sources) in `14_Zettelkasten` |
+| `/sb:meeting "<title>" [--attendees a,b]` | Meeting note; attendees auto-linked to People + interaction-logged |
+| `/sb:person <name> [--log "..."]` | People/CRM note + interaction log in `12_People` |
+| `/sb:habit "<name>" [--done\|--list]` | Habit tracker with streaks in `15_Habits` |
+| `/sb:verify <slug>` | Mark an AI-drafted note human-verified (clears the `[!ai]` callout + review queue) |
+| `/sb:challenge <slug>` | Append a skeptical `## Challenge` pass using your own related notes |
+| `/sb:ask-highlights "<query>"` | Verbatim-only retrieval (quotes + `file:line`), never generated prose |
+| `/sb:dashboard` | Regenerate the Life-Dashboard homepage (`00_Dashboard/Home.md`) |
+
+Note: `/sb:task new "<title>" [--parent <slug>]` supports hierarchical sub-tasks. Haiku-drafted
+notes (`/sb:lesson`, `/sb:decision`, `/sb:zettel --draft`) are written `verified: false` with a
+visible `[!ai]` callout and appear in `unverified.base` until `/sb:verify`.
+
+Note: `/sb:lesson "<title>" [--memory]` — `--memory` (or a model `durable:true` flag) also promotes the lesson to harness file-memory.
 
 ## When to invoke
 
@@ -71,6 +96,12 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 | `SB_CAPTURE_DEBOUNCE_MS` | `5000` | Min gap between writes |
 | `SB_CLAUDE_BIN` | `claude` | Path to claude CLI |
 | `SB_DISABLE` | unset | `1` to suppress all sb hooks |
+| `SB_VALIDATE_DISABLE` | unset | `1` to mute the AI-first Write/Edit validator |
+| `SB_CONSOLIDATE_STALE_DAYS` | `90` | Age after which an analyzed conversation is archive-eligible |
+| `SB_MEMORY_DIR` | `~/.claude/projects/<sanitized-home>/memory` | Harness file-memory location |
+| `SB_MEMORY_PROMOTE` | unset | `0` to disable promoting durable lessons to memory |
+| `SB_REMEMBER_DIR` | `~/.remember` | Rolling activity-history location |
+| `SB_LESSONS_DIR` | `~/.claude/lessons` | Global (canonical) lessons store for the bridge |
 
 ## Implementation
 
@@ -81,6 +112,14 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 - `lib/tagger.js` — rules + LLM tag merging
 - `lib/kanban.js` — Obsidian Kanban markdown CRUD
 - `lib/connector.js` — link suggestion engine
-- `hooks/sb-capture.js` — Stop/SubagentStop, writes conversation file
+- `lib/ai-first.js` — `## For future Claude` preamble + frontmatter + note validation
+- `lib/memory-bridge.js` — promote/list/mirror harness file-memory facts
+- `lib/remember-bridge.js` — append/read the `~/.remember` rolling history
+- `lib/repo-artifacts.js` — read a repo's `.journal/` + `.code_review/` (issues parsing)
+- `lib/lessons-bridge.js` — import/list/push the global `~/.claude/lessons` store
+- `commands/_runners/{consolidate,health,bases}.js` — self-maintenance + Bases
+- `commands/_runners/{sync-project,decision,lessons-import,graph}.js` — external-skill integrations
+- `hooks/sb-capture.js` — Stop/SubagentStop/**PreCompact**, writes conversation file (`type: conversation`)
 - `hooks/sb-plan-mirror.js` — PostToolUse, mirrors plans
-- `hooks/sb-session-start.js` — scaffolds project dir
+- `hooks/sb-validate.js` — PostToolUse (Write/Edit), non-blocking AI-first validator
+- `hooks/sb-session-start.js` — scaffolds project dir; injects Memory & Remember section

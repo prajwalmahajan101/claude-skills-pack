@@ -10,6 +10,8 @@ const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { paths, slugify, readSessionMap, VAULT, DIR } = require(path.join(SKILL_LIB, "vault.js"));
 const P = paths("_");
 const { parseFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
+const { preambleBlock } = require(path.join(SKILL_LIB, "ai-first.js"));
+const { logActivity } = require(path.join(SKILL_LIB, "remember-bridge.js"));
 
 const arg = process.argv.slice(2).join(" ").trim();
 if (!arg) { console.error("Usage: topic.js <slug-or-title>"); process.exit(2); }
@@ -30,7 +32,10 @@ if (!fs.existsSync(file)) {
     `slug: ${slug}`,
     `created: ${new Date().toISOString()}`,
     "tags: [topic]",
+    "ai-first: true",
     "---",
+    "",
+    preambleBlock(`Evergreen reference note on "${arg}". Accumulates notes and source backlinks across sessions; consult before re-researching this topic.`),
     "",
     `# ${arg}`,
     "",
@@ -44,6 +49,7 @@ if (!fs.existsSync(file)) {
   ];
   if (backlink) front.push(`- ${ts} — from ${backlink}`);
   fs.writeFileSync(file, front.join("\n") + "\n");
+  logActivity(`topic: ${arg}`);
   console.log(`Created: ${DIR.topics}/${slug}.md`);
 } else {
   if (backlink) {
