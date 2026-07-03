@@ -1,62 +1,69 @@
 ---
 name: code_assist
-description: "Developer workflow skill for git commits, code reviews, and phase journals. Use this skill whenever the user wants to: commit code changes (atomic commits, smart staging, conventional commits), review code quality (architectural review, codebase health scoring) for backend / frontend / TUI / fullstack repos, write a phase journal entry from the project's .journal/TEMPLATE.md, or says anything like 'commit', 'git commit', 'review code', 'code review', 'check code quality', 'review the codebase', 'commit my changes', 'split commits', 'atomic commits', 'review frontend', 'review backend', 'review tui', 'journal', 'journal entry', 'log this phase', 'phase journal', 'update journal', 'start a new journal'. Always use this skill instead of doing raw git commits, ad-hoc code reviews, or hand-rolled journal entries."
+description: "Self-contained developer-workflow powerhouse. Use whenever the user wants to: commit (atomic, conventional commits), review code (backend/frontend/tui/fullstack architectural review), write a phase journal, PLAN work (brainstorm/write/execute a design), DEBUG (scientific-method root-cause), record an ADR (architecture decision), VERIFY a change works, or run a cross-family FLOW (ship/start/fix). Triggers on: 'commit', 'git commit', 'atomic commits', 'split commits', 'review code', 'code review', 'check code quality', 'review backend/frontend/tui', 'journal', 'phase journal', 'log this phase', 'plan this', 'brainstorm', 'design approach', 'break this down', 'debug', 'why is this failing', 'root cause', 'ADR', 'architecture decision', 'record why we chose', 'verify', 'confirm it works', 'is this done', 'ship this', 'take this from ticket to PR'. Always use this skill instead of raw git commits, ad-hoc reviews, hand-rolled journals/plans/ADRs, or guess-and-check debugging."
 ---
 
-# code_assist — Developer Workflow Skill
+# code_assist — Developer Workflow Powerhouse
 
-Routes to the correct sub-skill family based on the user's request.
+A self-contained hub of disciplined developer-workflow families. Routes the request to the
+right family, backed by a deterministic Node CLI and a baked-in discipline layer.
+
+## Read first (every invocation)
+1. `_shared/discipline.md` — Iron Laws, Red-Flags, checklists-as-todos, family-chaining.
+2. `_shared/conventions.md` — commit/branch/versioning rules (incl. **no AI footer**).
+3. `_shared/state.md` + `node bin/ca-tools.js state-read` — the repo's `.code_assist/STATE.md`.
+
+Preconditions: if not in a git repository, say so and stop (except `plan brainstorm`).
 
 ## Top-Level Routing
 
-| Request | Sub-skill router | Slash command |
+| Request | Router | Slash command |
 |---|---|---|
-| Commit changes, atomic commits, split commits, stage & commit, dry-run commit plan | `git-commit/ROUTER.md` | `/code_assist:git_commit` |
-| Code review, architecture review, codebase quality check, review backend/frontend/tui | `code-review/ROUTER.md` | `/code_assist:code_review` |
-| Phase journal — create / update `.journal/M<phase>.md` from project `TEMPLATE.md` | `journal/ROUTER.md` | `/code_assist:journal` |
+| Commit / atomic commits / split / dry-run plan | `git-commit/ROUTER.md` | `/code_assist:git_commit` |
+| Code review (backend/frontend/tui/fullstack) | `code-review/ROUTER.md` | `/code_assist:code_review` |
+| Phase journal (new/update) | `journal/ROUTER.md` | `/code_assist:journal` |
+| Plan work — brainstorm/write/execute (HARD-GATE) | `plan/ROUTER.md` | `/code_assist:plan` |
+| Debug — scientific-method root cause | `debug/ROUTER.md` | `/code_assist:debug` |
+| ADR — record/supersede/index a decision | `adr/ROUTER.md` | `/code_assist:adr` |
+| Verify — fresh evidence before "done" | `verify/ROUTER.md` | `/code_assist:verify` |
+| Flow — cross-family chain (ship/start/fix/land) | `orchestrator/ROUTER.md` | `/code_assist:flow` |
 
-## How to Use
+*(Growing: `structure`, `format`, `github`, `track`, `notify`, `scan`, `graph`, `onboard`,
+`refactor`, `test`, `release` land in later waves — the `bin/ca-tools.js` backbone already
+supports their exact logic: `structure-audit`, `md-format`, `github`, `track`, `notify`,
+`scan`, `graph`.)*
 
-1. Identify whether the request is about **committing**, **reviewing**, or **journaling**.
-2. Read the matching router file:
-   - Commits → `/home/prjawal/.claude/skills/code_assist/git-commit/ROUTER.md`
-   - Reviews → `/home/prjawal/.claude/skills/code_assist/code-review/ROUTER.md`
-   - Journal → `/home/prjawal/.claude/skills/code_assist/journal/ROUTER.md`
-3. The router selects a sub-skill (plan vs. interactive for commits; backend / frontend / tui / fullstack for reviews; new vs. update for journal) and tells you which files to load next.
+## How to use
+1. Identify the family from the table (commit / review / journal / plan / debug / adr /
+   verify / flow). For multi-step asks, use `flow`.
+2. Read that family's `ROUTER.md`; it selects the variant and names the files to load.
+3. Create one todo per checklist item; follow the family exactly (rigid families) or adapt
+   the principle (flexible families) per `_shared/discipline.md`.
 
-The slash commands `/code_assist:code_review`, `/code_assist:git_commit`, `/code_assist:journal`, plus the per-variant commands (`code_review_backend`, `code_review_frontend`, `code_review_tui`, `git_commit_plan`) are thin entry points — they all read the same router/sub-skill files.
+## Deterministic backbone — `bin/ca-tools.js`
+Zero-dependency Node CLI for all exact logic (the LLM judges, the CLI computes):
+`stack-detect`, `diff-stats`, `structure-audit`/`structure-scaffold`, `state-read`/`state-write`,
+`md-format`, `graph` (gitnexus + graphify code intelligence — `impact` = blast radius),
+`github`/`track`/`notify`/`scan` (integrations; reads via env tokens, writes dry-run + confirm).
+Run `node ~/.claude/skills/code_assist/bin/ca-tools.js <cmd>` — output is JSON.
 
-## Combined Requests
+## Combined requests
+- "review then commit" → `review` → fix loop → `commit`.
+- "commit then journal" → `commit` → `journal` (references new SHAs).
+- "ticket to PR" / "ship it" → `/code_assist:flow ship` (or `start`).
 
-If the user asks for multiple actions:
-
-- "review then commit" → run code-review first, then git-commit after issues are resolved.
-- "commit then journal" → run git-commit first so the journal can reference the new SHAs, then journal.
-- "review, commit, journal" → review → commit → journal, in that order.
-
-## Preconditions
-
-If not inside a git repository, inform the user and stop.
-
-## Sub-skill Tree
-
+## Sub-skill tree
 ```
 code_assist/
-├── git-commit/
-│   ├── ROUTER.md     # plan vs interactive
-│   ├── shared.md     # commit message format + rules
-│   ├── plan.md       # dry-run output only
-│   └── interactive.md
-├── code-review/
-│   ├── ROUTER.md     # backend / frontend / tui / fullstack
-│   ├── detect.md     # stack detection
-│   ├── shared.md     # steps, output schema, living docs
-│   ├── backend.md    # backend weights + anti-patterns
-│   ├── frontend.md   # frontend weights + anti-patterns
-│   └── tui.md        # TUI/CLI weights + anti-patterns
-└── journal/
-    ├── ROUTER.md     # new vs update
-    ├── shared.md     # template structure, phase discovery, global rules
-    ├── new.md        # create fresh M<phase>.md from TEMPLATE.md
-    └── update.md     # append to / refine existing entry
+├── SKILL.md                 # this router
+├── bin/ca-tools.js          # deterministic backbone
+├── _shared/{discipline,conventions,state}.md
+├── orchestrator/ROUTER.md   # cross-family flows
+├── git-commit/  code-review/  journal/          # original families
+├── plan/{ROUTER,shared,brainstorm,write,execute}.md
+├── debug/{ROUTER,shared,investigate,resume}.md
+├── adr/{ROUTER,shared,new,supersede,index}.md
+├── verify/ROUTER.md
+├── agents/*.md              # subagents
+└── commands/*.md            # thin multi-level slash commands
 ```

@@ -41,7 +41,8 @@ type: short summary in imperative present tense
 - Explain **what** changed and **why**.
 - Include important technical details or impact.
 - Wrap lines at 72 characters.
-- No signatures or manual footers. The system-level `Co-Authored-By` line added by Claude is allowed.
+- **No signatures or footers of any kind** — including `Co-Authored-By: Claude` or any
+  "Generated with" line. See `_shared/conventions.md` (single source of truth).
 
 ---
 
