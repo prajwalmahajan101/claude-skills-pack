@@ -27,11 +27,16 @@ Preconditions: if not in a git repository, say so and stop (except `plan brainst
 | ADR — record/supersede/index a decision | `adr/ROUTER.md` | `/code_assist:adr` |
 | Verify — fresh evidence before "done" | `verify/ROUTER.md` | `/code_assist:verify` |
 | Flow — cross-family chain (ship/start/fix/land) | `orchestrator/ROUTER.md` | `/code_assist:flow` |
+| Structure — audit/scaffold/fix project layout | `structure/ROUTER.md` | `/code_assist:structure` |
+| Format — markdown (zero-dep) / code | `format/ROUTER.md` | `/code_assist:format` |
+| GitHub — PR/CI/issue via `gh` | `github/ROUTER.md` | `/code_assist:github` |
+| Track — Jira issue fetch/comment/transition | `track/ROUTER.md` | `/code_assist:track` |
+| Notify — Slack / Telegram | `notify/ROUTER.md` | `/code_assist:notify` |
+| Scan — SonarQube / Semgrep (review pre-pass) | `scan/ROUTER.md` | `/code_assist:scan` |
+| Graph — code intelligence (gitnexus/graphify) | `graph/ROUTER.md` | `/code_assist:graph` |
 
-*(Growing: `structure`, `format`, `github`, `track`, `notify`, `scan`, `graph`, `onboard`,
-`refactor`, `test`, `release` land in later waves — the `bin/ca-tools.js` backbone already
-supports their exact logic: `structure-audit`, `md-format`, `github`, `track`, `notify`,
-`scan`, `graph`.)*
+*(Growing: `onboard`, `refactor`, `test`, `release`, and condensed domain playbooks land in
+Wave 3. Integration writes stay dry-run + confirm; reads need the relevant env token.)*
 
 ## How to use
 1. Identify the family from the table (commit / review / journal / plan / debug / adr /
