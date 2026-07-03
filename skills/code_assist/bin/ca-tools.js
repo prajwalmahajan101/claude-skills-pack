@@ -1,0 +1,540 @@
+#!/usr/bin/env node
+"use strict";
+/*
+ * ca-tools.js — code_assist deterministic backbone.
+ *
+ * Zero external dependencies (Node >= 18 built-ins only). All EXACT logic lives
+ * here so the LLM never has to compute it: stack detection, diff/commit stats,
+ * project-structure audit + scaffold, per-repo state I/O, markdown formatting,
+ * and integration helpers (github/jira/slack/sonar) that read tokens from env
+ * and DRY-RUN external writes by default.
+ *
+ * Every subcommand prints JSON to stdout (so callers can parse with jq) unless
+ * --text is given. Network/mutating actions never fire unless explicitly asked
+ * (writes require --confirm; reads require the relevant env token, else no-op).
+ *
+ * Usage: node ca-tools.js <command> [args]
+ *   stack-detect [dir]            detect repo stack(s) + language
+ *   diff-stats [--staged]         changed files + insertions/deletions, grouped
+ *   structure-audit [dir]         gaps vs the canonical project structure
+ *   structure-scaffold <dir> [--lang L] [--apply]   create missing standard files
+ *   state-read [dir]              read .code_assist/STATE.md + config.json
+ *   state-write [dir] --key k --value v             upsert config.json key
+ *   md-format <file...> [--write] normalize markdown (zero-dep)
+ *   github <pr|ci|issue|release> …                  thin gh wrappers
+ *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
+ *   notify <slack|telegram> --text … [--confirm]    webhook post (dry-run default)
+ *   scan <sonar> …                                  Sonar web API (read-only)
+ *   graph <status|index|context|impact|detect-changes|query> …  code intel
+ *                                 (gitnexus call graph + graphify knowledge graph)
+ *   version                       print tool version
+ */
+
+const fs = require("node:fs");
+const path = require("node:path");
+const cp = require("node:child_process");
+
+const VERSION = "0.1.0";
+
+// ---------------------------------------------------------------------------
+// arg parsing
+// ---------------------------------------------------------------------------
+const argv = process.argv.slice(2);
+const cmd = argv[0];
+const rest = argv.slice(1);
+
+function flags(args) {
+  const out = { _: [] };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith("--")) {
+      const k = a.slice(2);
+      const next = args[i + 1];
+      if (next === undefined || next.startsWith("--")) out[k] = true;
+      else { out[k] = next; i++; }
+    } else out._.push(a);
+  }
+  return out;
+}
+
+function out(obj, opts = {}) {
+  const f = opts.text;
+  if (f) process.stdout.write(String(obj) + "\n");
+  else process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+}
+function die(msg, code = 1) { process.stderr.write("ca-tools: " + msg + "\n"); process.exit(code); }
+
+function sh(command, args, opts = {}) {
+  const r = cp.spawnSync(command, args, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024, ...opts });
+  return { status: r.status, stdout: (r.stdout || "").trim(), stderr: (r.stderr || "").trim(), error: r.error };
+}
+
+function inRepo(dir) {
+  const r = sh("git", ["-C", dir || ".", "rev-parse", "--is-inside-work-tree"]);
+  return r.status === 0 && r.stdout === "true";
+}
+
+// ---------------------------------------------------------------------------
+// stack detection
+// ---------------------------------------------------------------------------
+function detectStack(dir) {
+  dir = dir || ".";
+  const has = (p) => fs.existsSync(path.join(dir, p));
+  const langs = [];
+  if (has("pyproject.toml") || has("setup.py") || has("requirements.txt") || has("manage.py")) langs.push("python");
+  if (has("go.mod")) langs.push("go");
+  if (has("Cargo.toml")) langs.push("rust");
+  if (has("package.json")) langs.push("js");
+  if (has("pom.xml") || has("build.gradle") || has("build.gradle.kts") || has("settings.gradle")) langs.push("java");
+  if (has("terraform") || globMatch(dir, /\.tf$/)) langs.push("terraform");
+
+  // Coarse stack classification for the review router.
+  const stacks = [];
+  const pkg = safeJSON(path.join(dir, "package.json"));
+  const deps = pkg ? { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) } : {};
+  const frontendHints = ["react", "vue", "svelte", "next", "vite", "@angular/core", "solid-js"];
+  const tuiHints = ["ink", "blessed", "bubbletea", "ratatui", "textual", "rich"];
+  if (langs.includes("js") && frontendHints.some((h) => deps[h])) stacks.push("frontend");
+  if (has("manage.py") || has("pyproject.toml") && depFile(dir, /fastapi|flask|django|starlette/)) stacks.push("backend");
+  if (langs.includes("go") || langs.includes("java")) stacks.push("backend");
+  if (langs.includes("python") && !stacks.includes("backend")) stacks.push("backend");
+  // TUI detection across languages
+  if (tuiHints.some((h) => deps[h]) || depFile(dir, /bubbletea|ratatui|textual/) || (langs.includes("rust") && has("Cargo.toml") && depFile(dir, /ratatui|crossterm/))) {
+    stacks.push("tui");
+  }
+  const uniqStacks = [...new Set(stacks)];
+  return {
+    dir: path.resolve(dir),
+    languages: langs,
+    stacks: uniqStacks.length ? uniqStacks : (langs.length ? ["backend"] : ["unknown"]),
+    monorepo: has("shared") && (has("backend") || has("frontend")),
+  };
+}
+
+function depFile(dir, re) {
+  for (const f of ["pyproject.toml", "requirements.txt", "go.mod", "Cargo.toml"]) {
+    const p = path.join(dir, f);
+    if (fs.existsSync(p)) { try { if (re.test(fs.readFileSync(p, "utf8"))) return true; } catch {} }
+  }
+  return false;
+}
+function globMatch(dir, re) {
+  try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; }
+}
+function safeJSON(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; } }
+
+// ---------------------------------------------------------------------------
+// diff / commit stats
+// ---------------------------------------------------------------------------
+function diffStats(dir, staged) {
+  dir = dir || ".";
+  if (!inRepo(dir)) die("not a git repository: " + path.resolve(dir));
+  const args = ["-C", dir, "diff", "--numstat"];
+  if (staged) args.push("--staged");
+  const r = sh("git", args);
+  const files = [];
+  let ins = 0, del = 0;
+  for (const line of r.stdout.split("\n").filter(Boolean)) {
+    const [a, d, ...fp] = line.split("\t");
+    const file = fp.join("\t");
+    const ai = a === "-" ? 0 : parseInt(a, 10) || 0;
+    const di = d === "-" ? 0 : parseInt(d, 10) || 0;
+    ins += ai; del += di;
+    files.push({ file, insertions: ai, deletions: di, group: classifyFile(file) });
+  }
+  const untracked = staged ? [] : sh("git", ["-C", dir, "ls-files", "--others", "--exclude-standard"]).stdout.split("\n").filter(Boolean);
+  return { staged: !!staged, files, untracked, totals: { files: files.length, insertions: ins, deletions: del } };
+}
+
+// classify a path into a commit-grouping bucket
+function classifyFile(file) {
+  const f = file.toLowerCase();
+  if (/(^|\/)(test|tests|__tests__|spec)(\/|$)|\.(test|spec)\.[jt]sx?$|_test\.(go|py|rs)$/.test(f)) return "test";
+  if (/\.(md|rst|txt)$|(^|\/)docs?\//.test(f)) return "docs";
+  if (/(package(-lock)?\.json|pyproject\.toml|go\.(mod|sum)|cargo\.(toml|lock)|requirements.*\.txt|dockerfile|docker-compose|\.ya?ml$|\.toml$|\.ini$|makefile)/.test(f)) return "config";
+  if (/\.(css|scss|less)$|\.(prettierrc|editorconfig)/.test(f)) return "style";
+  return "code";
+}
+
+// ---------------------------------------------------------------------------
+// canonical project structure — audit + scaffold
+// ---------------------------------------------------------------------------
+// The canonical requirements, derived from the main-project audit. `always` are
+// language-agnostic; per-language add their own required markers.
+const CANON = {
+  always: [
+    { path: "README.md", kind: "file", why: "project overview" },
+    { path: "LICENSE", kind: "file", why: "license" },
+    { path: "CHANGELOG.md", kind: "file", why: "change history" },
+    { path: "CLAUDE.md", kind: "file", why: "agent guide (seed via /code_assist:onboard)" },
+    { path: "docs", kind: "dir", why: "documentation hub" },
+    { path: "docs/adr", kind: "dir", why: "architecture decision records (standardize on docs/adr/)" },
+    { path: ".github/workflows", kind: "dir", why: "CI" },
+    { path: ".gitignore", kind: "file", why: "vcs hygiene" },
+  ],
+  python: [
+    { path: "pyproject.toml", kind: "file", why: "packaging + ruff/mypy config" },
+    { path: "tests", kind: "dir", why: "test suite (split unit/integration/e2e)" },
+    { path: "src", kind: "dir", why: "src-layout package root", soft: true },
+  ],
+  go: [
+    { path: "go.mod", kind: "file", why: "module" },
+    { path: ".golangci.yml", kind: "file", why: "lint config", soft: true },
+  ],
+  rust: [
+    { path: "Cargo.toml", kind: "file", why: "crate/workspace" },
+    { path: "rustfmt.toml", kind: "file", why: "format config", soft: true },
+  ],
+  js: [
+    { path: "package.json", kind: "file", why: "package + scripts" },
+    { path: "tests", kind: "dir", why: "test suite", soft: true },
+  ],
+};
+
+// design docs that belong under docs/ (flag if found loose at repo root)
+const LOOSE_DOC_RE = /^(HLD|LLD|PRD|RFC|ARCHITECTURE|DESIGN|UX)\.md$/i;
+
+function structureAudit(dir) {
+  dir = dir || ".";
+  const det = detectStack(dir);
+  const req = [...CANON.always];
+  for (const lang of det.languages) if (CANON[lang]) req.push(...CANON[lang]);
+
+  const gaps = [];
+  for (const r of req) {
+    const full = path.join(dir, r.path);
+    const exists = fs.existsSync(full);
+    if (!exists) gaps.push({ ...r, severity: r.soft ? "warn" : "error" });
+  }
+  // ADR-naming split: docs/decisions used instead of docs/adr
+  if (fs.existsSync(path.join(dir, "docs", "decisions")) && !fs.existsSync(path.join(dir, "docs", "adr"))) {
+    gaps.push({ path: "docs/adr", kind: "dir", why: "found docs/decisions/ — standardize on docs/adr/", severity: "warn", rename_from: "docs/decisions" });
+  }
+  // loose root design docs
+  const looseDocs = [];
+  try {
+    for (const f of fs.readdirSync(dir)) if (LOOSE_DOC_RE.test(f)) looseDocs.push(f);
+  } catch {}
+  // empty dir smell
+  let empty = false;
+  try { empty = fs.readdirSync(dir).filter((f) => f !== ".git").length === 0; } catch {}
+
+  const score = Math.max(0, Math.round(100 * (1 - gaps.filter((g) => g.severity === "error").length / Math.max(1, req.length))));
+  return {
+    dir: path.resolve(dir),
+    detected: det,
+    required: req.length,
+    gaps,
+    loose_root_docs: looseDocs,
+    empty,
+    compliance_score: score,
+  };
+}
+
+// Scaffold missing standard files/dirs from built-in templates. Idempotent:
+// never overwrites an existing path. Dry-run unless --apply.
+function structureScaffold(dir, lang, apply) {
+  if (!dir) die("structure-scaffold requires a target dir");
+  const det = detectStack(dir);
+  const language = lang || det.languages[0] || "generic";
+  const planned = [];
+  const tmplDir = path.join(__dirname, "..", "structure", "templates");
+
+  const items = [
+    { path: "README.md", tmpl: "README.md" },
+    { path: "LICENSE", tmpl: "LICENSE" },
+    { path: "CHANGELOG.md", tmpl: "CHANGELOG.md" },
+    { path: "CLAUDE.md", tmpl: "CLAUDE.md" },
+    { path: ".gitignore", tmpl: "gitignore" },
+    { path: ".editorconfig", tmpl: "editorconfig" },
+    { path: "docs/adr/0000-template.md", tmpl: "adr-0000-template.md" },
+    { path: "docs/architecture.md", tmpl: "architecture.md" },
+    { path: ".github/workflows/ci.yml", tmpl: `ci.${language}.yml`, fallback: "ci.generic.yml" },
+  ];
+
+  for (const it of items) {
+    const dest = path.join(dir, it.path);
+    if (fs.existsSync(dest)) { planned.push({ path: it.path, action: "skip (exists)" }); continue; }
+    let body = readTemplate(tmplDir, it.tmpl) ?? (it.fallback ? readTemplate(tmplDir, it.fallback) : null);
+    if (body == null) body = defaultStub(it.path, path.basename(dir));
+    planned.push({ path: it.path, action: apply ? "create" : "would-create" });
+    if (apply) { fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.writeFileSync(dest, body); }
+  }
+  return { dir: path.resolve(dir), language, applied: !!apply, planned };
+}
+
+function readTemplate(tmplDir, name) {
+  if (!name) return null;
+  const p = path.join(tmplDir, name);
+  try { return fs.readFileSync(p, "utf8"); } catch { return null; }
+}
+function defaultStub(rel, project) {
+  const base = path.basename(rel);
+  if (base === "README.md") return `# ${project}\n\nOne-paragraph description of what ${project} does and who it is for.\n\n## Getting started\n\n- Install: see docs.\n- Run: see the Makefile targets.\n`;
+  if (base === "CHANGELOG.md") return `# Changelog\n\nAll notable changes are documented here (Keep a Changelog + SemVer).\n\n## [Unreleased]\n`;
+  if (base === "LICENSE") return `Copyright (c) ${project}\n\nChoose a license (for example MIT) and replace this file. See https://choosealicense.com/\n`;
+  if (base === ".gitignore") return `.env\n.env.*\n*.log\nnode_modules/\ndist/\nbuild/\n__pycache__/\n.venv/\ntarget/\n`;
+  if (base === ".editorconfig") return `root = true\n\n[*]\nindent_style = space\nindent_size = 2\nend_of_line = lf\ninsert_final_newline = true\ntrim_trailing_whitespace = true\n`;
+  return `<!-- @code_assist-generated placeholder for ${rel}; replace with real content. -->\n`;
+}
+
+// ---------------------------------------------------------------------------
+// per-repo state (.code_assist/)
+// ---------------------------------------------------------------------------
+function stateDir(dir) { return path.join(dir || ".", ".code_assist"); }
+function stateRead(dir) {
+  const sd = stateDir(dir);
+  const stateMd = path.join(sd, "STATE.md");
+  const cfg = path.join(sd, "config.json");
+  return {
+    dir: path.resolve(sd),
+    exists: fs.existsSync(sd),
+    state_md: fs.existsSync(stateMd) ? fs.readFileSync(stateMd, "utf8") : null,
+    config: safeJSON(cfg) || {},
+  };
+}
+function stateWrite(dir, key, value) {
+  if (!key) die("state-write requires --key");
+  const sd = stateDir(dir);
+  fs.mkdirSync(sd, { recursive: true });
+  const cfg = path.join(sd, "config.json");
+  const data = safeJSON(cfg) || {};
+  data[key] = coerce(value);
+  fs.writeFileSync(cfg, JSON.stringify(data, null, 2) + "\n");
+  return { config: cfg, set: { [key]: data[key] } };
+}
+function coerce(v) {
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (v != null && /^-?\d+(\.\d+)?$/.test(String(v))) return Number(v);
+  return v;
+}
+
+// ---------------------------------------------------------------------------
+// markdown formatter (zero-dep, conservative)
+// ---------------------------------------------------------------------------
+function formatMarkdown(src) {
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  const outL = [];
+  let inFence = false, fenceTok = "";
+  for (let raw of lines) {
+    const fence = raw.match(/^(\s*)(```+|~~~+)/);
+    if (fence) {
+      const tok = fence[2];
+      if (!inFence) { inFence = true; fenceTok = tok[0]; }
+      else if (tok[0] === fenceTok) { inFence = false; fenceTok = ""; }
+      outL.push(raw.replace(/[ \t]+$/, ""));
+      continue;
+    }
+    if (inFence) { outL.push(raw); continue; }        // never touch code blocks
+    let line = raw.replace(/[ \t]+$/, "");             // trailing ws
+    line = line.replace(/\t/g, "  ");                  // tabs -> 2 spaces (outside code)
+    // ASCII-normalize common smart punctuation (outside code)
+    line = line.replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+               .replace(/[–—]/g, "-").replace(/…/g, "...").replace(/ /g, " ");
+    outL.push(line);
+  }
+  // collapse 3+ blank lines to 1, ensure single trailing newline
+  let text = outL.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n";
+  return text;
+}
+
+function mdFormatCmd(f) {
+  const files = f._;
+  if (!files.length) die("md-format requires file paths");
+  const results = [];
+  for (const file of files) {
+    let src; try { src = fs.readFileSync(file, "utf8"); } catch (e) { results.push({ file, error: e.message }); continue; }
+    const formatted = formatMarkdown(src);
+    const changed = formatted !== src;
+    if (changed && f.write) fs.writeFileSync(file, formatted);
+    results.push({ file, changed, written: !!(changed && f.write) });
+  }
+  return { wrote: !!f.write, results };
+}
+
+// ---------------------------------------------------------------------------
+// integrations — github (gh), track (jira), notify (slack/telegram), scan (sonar)
+// ---------------------------------------------------------------------------
+function ghAvailable() { return sh("gh", ["--version"]).status === 0; }
+
+function github(args) {
+  const f = flags(args);
+  const sub = f._[0];
+  if (!ghAvailable()) return { ok: false, reason: "gh CLI not found; install GitHub CLI or use git." };
+  switch (sub) {
+    case "ci": {
+      const r = sh("gh", ["run", "list", "--limit", String(f.limit || 5), "--json", "status,conclusion,name,headBranch,createdAt"]);
+      return r.status === 0 ? { ok: true, runs: safeParse(r.stdout) } : { ok: false, reason: r.stderr };
+    }
+    case "pr": {
+      if (f.list || !f._[1]) { const r = sh("gh", ["pr", "list", "--json", "number,title,state,headRefName", "--limit", String(f.limit || 10)]); return r.status === 0 ? { ok: true, prs: safeParse(r.stdout) } : { ok: false, reason: r.stderr }; }
+      const r = sh("gh", ["pr", "view", String(f._[1]), "--json", "number,title,state,body,url"]);
+      return r.status === 0 ? { ok: true, pr: safeParse(r.stdout) } : { ok: false, reason: r.stderr };
+    }
+    case "issue": {
+      const r = sh("gh", ["issue", "view", String(f._[1]), "--json", "number,title,body,state,labels"]);
+      return r.status === 0 ? { ok: true, issue: safeParse(r.stdout) } : { ok: false, reason: r.stderr };
+    }
+    default:
+      return { ok: false, reason: "usage: github <ci|pr|issue> …" };
+  }
+}
+function safeParse(s) { try { return JSON.parse(s); } catch { return s; } }
+
+// Jira REST v3. Reads JIRA_BASE_URL/JIRA_EMAIL/JIRA_TOKEN. Writes are DRY-RUN
+// unless --confirm is passed.
+function track(args) {
+  const f = flags(args);
+  const sub = f._[0];
+  const base = process.env.JIRA_BASE_URL, email = process.env.JIRA_EMAIL, token = process.env.JIRA_TOKEN;
+  const configured = base && email && token;
+  const auth = configured ? "Basic " + Buffer.from(`${email}:${token}`).toString("base64") : null;
+  const key = f._[1];
+
+  if (!configured && sub !== "help") {
+    return { ok: false, configured: false, hint: "set JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN to enable Jira; commands no-op until then." };
+  }
+  switch (sub) {
+    case "get":
+      return httpJSON("GET", `${base}/rest/api/3/issue/${key}?fields=summary,status,assignee,issuetype`, auth).then((r) => ({ ok: r.ok, issue: r.body }));
+    case "transitions":
+      return httpJSON("GET", `${base}/rest/api/3/issue/${key}/transitions`, auth).then((r) => ({ ok: r.ok, transitions: r.body }));
+    case "comment": {
+      const body = { body: { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: String(f.text || "") }] }] } };
+      if (!f.confirm) return Promise.resolve({ ok: true, dry_run: true, would_POST: `${base}/rest/api/3/issue/${key}/comment`, payload: body });
+      return httpJSON("POST", `${base}/rest/api/3/issue/${key}/comment`, auth, body).then((r) => ({ ok: r.ok, result: r.body }));
+    }
+    case "transition": {
+      const body = { transition: { id: String(f.to || "") } };
+      if (!f.confirm) return Promise.resolve({ ok: true, dry_run: true, would_POST: `${base}/rest/api/3/issue/${key}/transitions`, payload: body });
+      return httpJSON("POST", `${base}/rest/api/3/issue/${key}/transitions`, auth, body).then((r) => ({ ok: r.ok, result: r.body || "transitioned" }));
+    }
+    default:
+      return Promise.resolve({ ok: false, reason: "usage: track <get|transitions|comment|transition> <KEY> [--text|--to] [--confirm]" });
+  }
+}
+
+function notify(args) {
+  const f = flags(args);
+  const sub = f._[0];
+  const text = f.text || f._.slice(1).join(" ");
+  if (sub === "slack") {
+    const url = process.env.SLACK_WEBHOOK_URL;
+    if (!url) return Promise.resolve({ ok: false, configured: false, hint: "set SLACK_WEBHOOK_URL to enable Slack." });
+    if (!f.confirm) return Promise.resolve({ ok: true, dry_run: true, would_POST: "SLACK_WEBHOOK_URL", payload: { text } });
+    return httpJSON("POST", url, null, { text }).then((r) => ({ ok: r.ok, status: r.status }));
+  }
+  if (sub === "telegram") {
+    const tok = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+    if (!tok || !chat) return Promise.resolve({ ok: false, configured: false, hint: "set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID." });
+    const url = `https://api.telegram.org/bot${tok}/sendMessage`;
+    if (!f.confirm) return Promise.resolve({ ok: true, dry_run: true, would_POST: "telegram sendMessage", payload: { chat_id: chat, text } });
+    return httpJSON("POST", url, null, { chat_id: chat, text }).then((r) => ({ ok: r.ok, status: r.status }));
+  }
+  return Promise.resolve({ ok: false, reason: "usage: notify <slack|telegram> --text … [--confirm]" });
+}
+
+function scan(args) {
+  const f = flags(args);
+  const sub = f._[0];
+  if (sub === "sonar") {
+    const host = process.env.SONAR_HOST_URL, token = process.env.SONAR_TOKEN, key = f.project || process.env.SONAR_PROJECT_KEY;
+    if (!host || !token) return Promise.resolve({ ok: false, configured: false, hint: "set SONAR_HOST_URL + SONAR_TOKEN (+ --project) to pull findings." });
+    const auth = "Basic " + Buffer.from(`${token}:`).toString("base64");
+    return httpJSON("GET", `${host}/api/issues/search?componentKeys=${encodeURIComponent(key || "")}&resolved=false&ps=100`, auth)
+      .then((r) => ({ ok: r.ok, issues: r.body && r.body.issues ? r.body.issues.map((i) => ({ key: i.key, rule: i.rule, severity: i.severity, component: i.component, line: i.line, message: i.message })) : [], total: r.body && r.body.total }));
+  }
+  return Promise.resolve({ ok: false, reason: "usage: scan sonar [--project KEY]" });
+}
+
+// ---------------------------------------------------------------------------
+// code intelligence — gitnexus (call graph) + graphify (knowledge graph)
+// Both are optional external CLIs; degrade gracefully when absent. All actions
+// here are READ-ONLY analysis (indexing writes only to the tool's own cache).
+// ---------------------------------------------------------------------------
+function have(bin) { return sh(bin, ["--version"]).status === 0 || sh(bin, ["--help"]).status === 0; }
+
+function graph(args) {
+  const f = flags(args);
+  const sub = f._[0];
+  const target = f._[1] || ".";
+  const gnx = have("gitnexus");
+  const gfy = have("graphify");
+  switch (sub) {
+    case "status":
+      return { ok: true, gitnexus: gnx, graphify: gfy,
+        hint: gnx || gfy ? undefined : "install gitnexus and/or graphify for code intelligence." };
+    case "index": {
+      // gitnexus analyze indexes the call graph; graphify builds graph.json.
+      if (gnx) { const r = sh("gitnexus", ["analyze", target], { timeout: 1000 * 60 * 10 }); return { ok: r.status === 0, tool: "gitnexus", stdout: tail(r.stdout), stderr: tail(r.stderr) }; }
+      if (gfy) { const r = sh("graphify", ["update", target]); return { ok: r.status === 0, tool: "graphify", stdout: tail(r.stdout) }; }
+      return { ok: false, reason: "neither gitnexus nor graphify installed." };
+    }
+    case "context": {
+      if (!gnx) return { ok: false, reason: "gitnexus not installed (needed for symbol context)." };
+      const r = sh("gitnexus", ["context", f._[1] || ""], { timeout: 1000 * 120 });
+      return { ok: r.status === 0, symbol: f._[1], out: r.stdout, stderr: tail(r.stderr) };
+    }
+    case "impact": {
+      // blast radius: what breaks if you change this symbol
+      if (!gnx) return { ok: false, reason: "gitnexus not installed (needed for impact/blast-radius)." };
+      const r = sh("gitnexus", ["impact", f._[1] || ""], { timeout: 1000 * 120 });
+      return { ok: r.status === 0, target: f._[1], out: r.stdout, stderr: tail(r.stderr) };
+    }
+    case "detect-changes": {
+      // map the current git diff to indexed symbols + affected execution flows
+      if (!gnx) return { ok: false, reason: "gitnexus not installed (needed for detect-changes)." };
+      const r = sh("gitnexus", ["detect-changes"], { cwd: target, timeout: 1000 * 120 });
+      return { ok: r.status === 0, out: r.stdout, stderr: tail(r.stderr) };
+    }
+    case "query": {
+      const q = f._.slice(1).join(" ");
+      if (gnx) { const r = sh("gitnexus", ["query", q], { timeout: 1000 * 120 }); return { ok: r.status === 0, tool: "gitnexus", out: r.stdout }; }
+      if (gfy) { const r = sh("graphify", ["query", q]); return { ok: r.status === 0, tool: "graphify", out: r.stdout }; }
+      return { ok: false, reason: "neither gitnexus nor graphify installed." };
+    }
+    default:
+      return { ok: false, reason: "usage: graph <status|index|context|impact|detect-changes|query> [args]" };
+  }
+}
+function tail(s, n = 40) { const l = String(s || "").split("\n"); return l.length > n ? l.slice(-n).join("\n") : String(s || ""); }
+
+// minimal fetch-based JSON HTTP (Node 18+ global fetch)
+async function httpJSON(method, url, auth, body) {
+  const headers = { "Accept": "application/json" };
+  if (auth) headers["Authorization"] = auth;
+  if (body) headers["Content-Type"] = "application/json";
+  try {
+    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    let parsed = null; const txt = await res.text();
+    try { parsed = txt ? JSON.parse(txt) : null; } catch { parsed = txt; }
+    return { ok: res.ok, status: res.status, body: parsed };
+  } catch (e) {
+    return { ok: false, status: 0, body: { error: e.message } };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// dispatch
+// ---------------------------------------------------------------------------
+(async function main() {
+  const f = flags(rest);
+  switch (cmd) {
+    case "version": return out({ name: "ca-tools", version: VERSION });
+    case "stack-detect": return out(detectStack(f._[0] || "."));
+    case "diff-stats": return out(diffStats(f._[0] || ".", !!f.staged));
+    case "structure-audit": return out(structureAudit(f._[0] || "."));
+    case "structure-scaffold": return out(structureScaffold(f._[0], f.lang, !!f.apply));
+    case "state-read": return out(stateRead(f._[0] || "."));
+    case "state-write": return out(stateWrite(f._[0] || ".", f.key, f.value));
+    case "md-format": return out(mdFormatCmd(f));
+    case "github": return out(github(rest));
+    case "track": return out(await track(rest));
+    case "notify": return out(await notify(rest));
+    case "scan": return out(await scan(rest));
+    case "graph": return out(graph(rest));
+    case undefined: return die("no command. see header for usage.", 2);
+    default: return die("unknown command: " + cmd, 2);
+  }
+})().catch((e) => die(e.stack || String(e)));
