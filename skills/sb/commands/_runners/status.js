@@ -7,6 +7,8 @@ const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { projectSlugFromCwd, paths, readSessionMap, VAULT, DIR } = require(path.join(SKILL_LIB, "vault.js"));
 const { parseFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 const { countKanban } = require(path.join(SKILL_LIB, "kanban.js"));
+const { listFacts } = require(path.join(SKILL_LIB, "memory-bridge.js"));
+const { recentHighlights } = require(path.join(SKILL_LIB, "remember-bridge.js"));
 
 const cwd = process.argv[2] || process.cwd();
 const slug = projectSlugFromCwd(cwd);
@@ -46,6 +48,16 @@ if (fs.existsSync(projectsDir)) {
 }
 
 const recentLessons = countRecentLessons(p.lessons, 7);
+const memFacts = safe(() => listFacts().length, 0);
+const highlights = safe(() => recentHighlights(3), []);
+const journals = safe(() => countMd(path.join(p.project, "journal")), 0);
+const reviews = safe(() => countMd(path.join(p.project, "reviews")), 0);
+const decisions = safe(() => countMd(path.join(p.project, "decisions")), 0);
+const zettels = safe(() => countMd(p.zettel), 0);
+const meetings = safe(() => countMd(p.meetings), 0);
+const people = safe(() => countMd(p.people), 0);
+const habitsN = safe(() => countMd(p.habits), 0);
+const unverified = safe(() => countUnverified(), 0);
 
 const lines = [
   `Project: ${slug}  (${cwd})`,
@@ -53,14 +65,45 @@ const lines = [
   `  Tasks:         ${projKanban.todo} To Do, ${projKanban.doing} Doing, ${projKanban.done} Done`,
   `  Plans:         ${projPlans} mirrored`,
   `  Lessons:       ${projLessons} captured`,
+  `  Artifacts:     ${journals} journal(s), ${reviews} review file(s), ${decisions} decision(s)`,
   ``,
   `Across all projects:`,
   `  Un-analyzed conversations: ${allUnanalyzed}`,
   `  Open tasks:                ${totalOpenTasks}`,
   `  Recent lessons (last 7d):  ${recentLessons}`,
   `  Sessions — crashed: ${crashed}, in-progress: ${inProgress}, cleared: ${cleared}`,
+  ``,
+  `Knowledge base:`,
+  `  Zettels: ${zettels}  Meetings: ${meetings}  People: ${people}  Habits: ${habitsN}`,
+  `  Unverified notes (review): ${unverified}`,
+  ``,
+  `External memory:`,
+  `  Harness memory facts:      ${memFacts}`,
+  `  Remember (recent):         ${highlights.length ? "" : "(none)"}`,
+  ...highlights.map((h) => `    - ${h.slice(0, 100)}`),
 ];
 console.log(lines.join("\n"));
+
+function safe(fn, fallback) { try { return fn(); } catch { return fallback; } }
+function countMd(dir) { return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length : 0; }
+function countUnverified() {
+  let n = 0;
+  const stack = [VAULT];
+  const skip = new Set(["_meta", "_templates", "_assets", "__scribble", ".obsidian", ".trash"]);
+  while (stack.length) {
+    const d = stack.pop();
+    let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      if (e.name.startsWith(".") || skip.has(e.name)) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) stack.push(full);
+      else if (e.name.endsWith(".md")) {
+        try { if (/^verified:\s*false/m.test(fs.readFileSync(full, "utf8"))) n++; } catch {}
+      }
+    }
+  }
+  return n;
+}
 
 function lessonCount(file) {
   if (!fs.existsSync(file)) return 0;

@@ -500,6 +500,32 @@ Build phases (from PLAN.md):
 
 ---
 
+## Development (source repo ⇄ installed copy)
+
+This repo (`skills/sb/`) is the canonical source. The **installed** copy at
+`~/.claude/skills/sb/` (plus hooks at `~/.claude/hooks/sb-*.js`) is what actually runs,
+and in practice it's the working copy you edit and test against a live vault.
+
+Two scripts keep them in sync:
+
+| Direction | Script | What it does |
+|---|---|---|
+| repo → installed | `./install.sh` | Full install: copies skill files + hooks, symlinks commands, jq-merges `settings-snippet.json`, scaffolds the vault. |
+| installed → repo | `./dev-sync.sh` | Reverse mirror of the code you edited in place (`SKILL.md`, `lib/*.js`, `commands/*.md`, `commands/_runners/*.js`, `hooks/sb-*.js`) back into this repo so it can be committed. |
+
+`dev-sync.sh` is **additive/overwrite only** — it never deletes, and it never touches
+repo-authored plumbing (`install.sh`, `settings-snippet.json`, `README.md`, `docs/`,
+`prompts/`, `bin/`, `vault-templates/`, seeds). Typical loop:
+
+```bash
+# edit + test in ~/.claude/skills/sb/ against a scratch vault …
+./dev-sync.sh          # mirror the edits back into this repo
+git checkout -b feat/…  # never commit to main
+git add -A && git commit
+```
+
+---
+
 ## License & contributions
 
 Personal project — fork freely. Plan & README live in this repo; the installed copies under `~/.claude/` are derived artifacts and should not be edited directly (re-run installer instead).

@@ -65,7 +65,7 @@ done
 
 # ─── 4. vault scaffold (Phase 9: numbered layout, mirrors my_vault) ─────────
 say "Scaffolding vault → $VAULT_PATH"
-mkdir -p "$VAULT_PATH"/{00_Dashboard,01_Conversations,02_Projects,03_Lessons,04_Topics,05_Tasks,06_Connections,07_Reviews/Daily,07_Reviews/Weekly,08_Insights,09_Exports,99_Inbox,_templates,_assets,__scribble,_meta}
+mkdir -p "$VAULT_PATH"/{00_Dashboard,01_Conversations,02_Projects,03_Lessons,04_Topics,05_Tasks,06_Connections,07_Reviews/Daily,07_Reviews/Weekly,08_Insights,09_Exports,10_Memory,11_Decisions,12_People,13_Meetings,14_Zettelkasten,15_Habits,16_Ideas,99_Inbox,_templates,_assets,__scribble,_meta}
 cp -n "$HERE/vault-templates/"*.md "$VAULT_PATH/_templates/" 2>/dev/null || true
 [ -f "$VAULT_PATH/_meta/session-map.json"     ] || echo '{}' > "$VAULT_PATH/_meta/session-map.json"
 [ -f "$VAULT_PATH/_meta/tag-rules.json"       ] || cp "$HERE/tag-rules.seed.json" "$VAULT_PATH/_meta/tag-rules.json"
@@ -177,7 +177,7 @@ if [ "$HAVE_JQ" -eq 1 ]; then
   # Merge idempotently: strip any existing sb-* hook entries first, then append fresh ones.
   # An "sb-* entry" = an entry whose .hooks[] contains a command matching sb-(capture|session-start|session-end|plan-mirror|prompt-watch).js
   jq --slurpfile snip "$TMP_SNIPPET" '
-    def strip_sb: map(.hooks |= map(select(.command // "" | test("sb-(capture|session-start|session-end|plan-mirror|prompt-watch)\\.js") | not)) | select(.hooks | length > 0));
+    def strip_sb: map(.hooks |= map(select(.command // "" | test("sb-(capture|session-start|session-end|plan-mirror|prompt-watch|validate)\\.js") | not)) | select(.hooks | length > 0));
     .hooks = (.hooks // {}) |
     .hooks |= with_entries(.value |= strip_sb) |
     reduce ($snip[0].hooks | keys[]) as $k (.;
