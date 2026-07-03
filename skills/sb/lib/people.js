@@ -7,6 +7,10 @@ const path = require("node:path");
 const { VAULT, DIR, slugify } = require("./vault.js");
 const { fm, parseFrontmatter, updateFrontmatter } = require("./markdown.js");
 const { preambleBlock } = require("./ai-first.js");
+const { appendTimeline } = require("./timeline.js");
+
+// Fields whose changes are recorded bi-temporally (never overwritten).
+const TIMELINE_FIELDS = ["role", "company", "relationship"];
 
 function peopleDir() {
   const d = path.join(VAULT, DIR.people);
@@ -41,10 +45,17 @@ function ensurePerson(name, fields = {}) {
       `\n# ${name}\n\n## About\n${fields.about || ""}\n\n## Contact\n- **Email:** ${fields.email || ""}\n- **LinkedIn:** ${fields.linkedin || ""}\n- **Role:** ${fields.role || ""} ${fields.company ? "@ " + fields.company : ""}\n\n## Interaction Log\n`;
     fs.writeFileSync(file, front + body);
   } else if (Object.keys(fields).length) {
-    // Fill any provided fields that are currently empty.
     const { meta } = parseFrontmatter(fs.readFileSync(file, "utf8"));
+    // Bi-temporal fields (role/company/relationship): never overwrite — record a
+    // timeline entry whenever the provided value differs from the current one.
+    for (const k of TIMELINE_FIELDS) {
+      if (fields[k]) {
+        appendTimeline(file, { field: k, value: fields[k], source: fields.source || "person-update" });
+      }
+    }
+    // Static fields (email/linkedin): fill only if currently empty.
     const updates = {};
-    for (const k of ["role", "company", "email", "linkedin", "relationship"]) {
+    for (const k of ["email", "linkedin"]) {
       if (fields[k] && !meta[k]) updates[k] = fields[k];
     }
     if (Object.keys(updates).length) updateFrontmatter(file, updates);

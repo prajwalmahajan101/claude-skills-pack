@@ -35,7 +35,7 @@ function loadIndex({ excludeFolders = EXCLUDE_FOLDERS } = {}) {
         file: f,
         rel: path.relative(VAULT, f),
         type: meta.type || inferType(f),
-        tags: (meta.tags || []).map(t => String(t).toLowerCase()),
+        tags: coerceTags(meta.tags),
         title: meta.title || path.basename(f, ".md"),
         body,
         keywords: counts,
@@ -45,6 +45,17 @@ function loadIndex({ excludeFolders = EXCLUDE_FOLDERS } = {}) {
     } catch {}
   });
   return notes;
+}
+
+// Frontmatter tags may parse as a real array (block style) or a raw string
+// ("[a, b]" inline). Coerce to a clean lowercased string[] either way so a note
+// is never silently dropped from the index over a `.map` on a string.
+function coerceTags(t) {
+  if (Array.isArray(t)) return t.map((x) => String(x).toLowerCase());
+  if (typeof t === "string") {
+    return t.replace(/^\[|\]$/g, "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
 }
 
 function inferType(file) {

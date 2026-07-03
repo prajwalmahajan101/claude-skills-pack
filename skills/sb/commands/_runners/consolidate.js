@@ -89,13 +89,20 @@ fs.mkdirSync(P.inbox, { recursive: true });
 const reportFile = path.join(P.inbox, `consolidate-${DATE}.md`);
 fs.writeFileSync(reportFile, report);
 
-// --- Regenerate Bases + log to remember (only on apply) ---
+// --- Regenerate Bases, entry docs, emergent synthesis + log (only on apply) ---
 if (APPLY) {
-  for (const runner of ["bases.js", "dashboard.js"]) {
+  // bases + dashboard + init take no args; emerge needs --apply to write.
+  const runners = [
+    ["bases.js", []],
+    ["dashboard.js", []],
+    ["init.js", []],
+    ["emerge.js", ["--apply"]],
+  ];
+  for (const [runner, extraArgs] of runners) {
     try {
       require("node:child_process").execFileSync(
         process.execPath,
-        [path.join(SKILL_LIB, "..", "commands", "_runners", runner)],
+        [path.join(SKILL_LIB, "..", "commands", "_runners", runner), ...extraArgs],
         { stdio: "ignore" }
       );
     } catch {}

@@ -36,7 +36,7 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 | `/sb:kanban [--project] [--open]` | Render/open project kanban |
 | `/sb:connect [--current]` | Suggest links between notes |
 | `/sb:tag [path?]` | Auto-tag notes |
-| `/sb:search <query>` | Vault full-text search via Obsidian CLI |
+| `/sb:search <query>` | Vault full-text search via Obsidian CLI; `--semantic` fuses precomputed-vector neighbors with lexical (RRF, key-free) |
 | `/sb:project [<slug>]` | List projects / show project INDEX |
 | `/sb:backfill [--days N\|--all]` | Import historical conversations |
 | `/sb:consolidate [--apply]` | Dedupe lessons, archive stale convos, promote durable→memory, import global lessons (dry-run unless `--apply`) |
@@ -54,12 +54,21 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 | `/sb:challenge <slug>` | Append a skeptical `## Challenge` pass using your own related notes |
 | `/sb:ask-highlights "<query>"` | Verbatim-only retrieval (quotes + `file:line`), never generated prose |
 | `/sb:dashboard` | Regenerate the Life-Dashboard homepage (`00_Dashboard/Home.md`) |
+| `/sb:eval [--rebuild] [--sample N]` | Measure retrieval quality — recall@1/3/5/10 + MRR per type over a Haiku-paraphrased held-out question set (`_meta/eval-set.json`) |
+| `/sb:distill "<note>"` | Distill a note into atomic, source-anchored claims (each `(src: Bn)`); unsourced claims dropped + reported; `verified:false` note in `08_Insights` |
+| `/sb:related "<note>" [--k N]` | Semantically nearest notes via smart-connections precomputed vectors (key-free, note-to-note cosine) |
+| `/sb:init` | (Re)generate `_CLAUDE.md` + `index.md` (folder map, note types, rules, command list, counts, Base links) — idempotent, sentinel-bounded |
+| `/sb:emerge [--apply] [--min N]` | Cluster lessons/zettels/topics by shared tag/title-token; draft `type:synthesis`, `verified:false` pages in `08_Insights` (dedup via `_meta/synthesis-seen.json`) |
+| `/sb:idea "<title>" [--body "a; b"]` | Capture an idea into `16_Ideas` (`status:captured`); bullets become the graduation checklist |
+| `/sb:graduate "<idea>" [--project <slug>]` | Promote an idea → `02_Projects/<slug>/` + seed kanban cards from its bullets; idea `status:graduated` + backlink |
 
 Note: `/sb:task new "<title>" [--parent <slug>]` supports hierarchical sub-tasks. Haiku-drafted
 notes (`/sb:lesson`, `/sb:decision`, `/sb:zettel --draft`) are written `verified: false` with a
 visible `[!ai]` callout and appear in `unverified.base` until `/sb:verify`.
 
 Note: `/sb:lesson "<title>" [--memory]` — `--memory` (or a model `durable:true` flag) also promotes the lesson to harness file-memory.
+
+Note: facts that change over time (a person's `role`/`company`/`relationship`, a project's `status`) are recorded **bi-temporally** via `lib/timeline.js` — a `timeline:` frontmatter list of `field|value|from|source` entries. Values are never overwritten; the first change also seeds the prior value (`source: initial`) so no history is lost. `currentValue`/`historyOf` read it back.
 
 ## When to invoke
 
@@ -79,6 +88,8 @@ Note: `/sb:lesson "<title>" [--memory]` — `--memory` (or a model `durable:true
 ├── lessons/<YYYY-MM-DD>-<slug>.md
 ├── topics/<slug>.md
 ├── connections/<theme>.md
+├── 08_Insights/          # distillation + synthesis (verified:false until /sb:verify)
+├── 16_Ideas/<slug>.md    # captured ideas (status: captured|graduated)
 ├── inbox/
 ├── templates/
 ├── tags.md
@@ -102,6 +113,9 @@ Note: `/sb:lesson "<title>" [--memory]` — `--memory` (or a model `durable:true
 | `SB_MEMORY_PROMOTE` | unset | `0` to disable promoting durable lessons to memory |
 | `SB_REMEMBER_DIR` | `~/.remember` | Rolling activity-history location |
 | `SB_LESSONS_DIR` | `~/.claude/lessons` | Global (canonical) lessons store for the bridge |
+| `SB_EMBED_CMD` | unset | Optional query-embedder command (query on stdin → JSON float array on stdout) for `/sb:search --semantic`. Unset → keyword-anchor fallback (key-free) |
+| `SB_EMBED_MODEL` | `TaylorAI/bge-micro-v2` | Which precomputed smart-connections model's vectors to read from `.smart-env/multi/*.ajson` |
+| `SB_EVAL_SAMPLE` | `12` | Notes sampled when building the `/sb:eval` question set |
 
 ## Implementation
 
@@ -113,11 +127,15 @@ Note: `/sb:lesson "<title>" [--memory]` — `--memory` (or a model `durable:true
 - `lib/kanban.js` — Obsidian Kanban markdown CRUD
 - `lib/connector.js` — link suggestion engine
 - `lib/ai-first.js` — `## For future Claude` preamble + frontmatter + note validation
+- `lib/timeline.js` — bi-temporal facts (`timeline:` history; never overwrite)
+- `lib/provenance.js` — numbered source blocks + source-anchored claim splitting (for `/sb:distill`)
+- `lib/embeddings.js` — key-free semantic layer over smart-connections precomputed vectors (cosine/nearest/anchor)
 - `lib/memory-bridge.js` — promote/list/mirror harness file-memory facts
 - `lib/remember-bridge.js` — append/read the `~/.remember` rolling history
 - `lib/repo-artifacts.js` — read a repo's `.journal/` + `.code_review/` (issues parsing)
 - `lib/lessons-bridge.js` — import/list/push the global `~/.claude/lessons` store
-- `commands/_runners/{consolidate,health,bases}.js` — self-maintenance + Bases
+- `commands/_runners/{consolidate,health,bases,init,emerge,eval}.js` — self-maintenance, Bases, entry docs, synthesis, retrieval eval
+- `commands/_runners/{distill,related,idea,graduate}.js` — provenance distillation, semantic neighbors, idea lifecycle
 - `commands/_runners/{sync-project,decision,lessons-import,graph}.js` — external-skill integrations
 - `hooks/sb-capture.js` — Stop/SubagentStop/**PreCompact**, writes conversation file (`type: conversation`)
 - `hooks/sb-plan-mirror.js` — PostToolUse, mirrors plans

@@ -30,6 +30,8 @@ const FILES = {
   "meetings.base": meetingsBase(),
   "people.base": peopleBase(),
   "habits.base": habitsBase(),
+  "ideas.base": ideasBase(),
+  "synthesis.base": synthesisBase(),
   "unverified.base": unverifiedBase(),
 };
 
@@ -433,6 +435,66 @@ views:
       - cadence
     columnSize:
       file.basename: 220
+`;
+}
+
+function ideasBase() {
+  return `filters:
+  and:
+    - file.inFolder("${DIR.ideas}")
+    - file.ext == "md"
+    - note.type == "idea"
+properties:
+  status:
+    displayName: Status
+  project:
+    displayName: Graduated to
+  date:
+    displayName: Captured
+  tags:
+    displayName: Tags
+views:
+  - type: table
+    name: By status
+    groupBy:
+      property: status
+      direction: ASC
+    order:
+      - date
+      - file.basename
+      - project
+      - tags
+    columnSize:
+      file.basename: 300
+`;
+}
+
+function synthesisBase() {
+  return `filters:
+  and:
+    - file.inFolder("${DIR.insights}")
+    - file.ext == "md"
+    - note.type == "synthesis"
+properties:
+  theme:
+    displayName: Theme
+  member_count:
+    displayName: Members
+  verified:
+    displayName: Verified
+  date:
+    displayName: Date
+views:
+  - type: table
+    name: Recent
+    order:
+      - date
+      - file.basename
+      - theme
+      - member_count
+      - verified
+    columnSize:
+      file.basename: 340
 `;
 }
 
