@@ -21,6 +21,11 @@
  *   state-read [dir]              read .code_assist/STATE.md + config.json
  *   state-write [dir] --key k --value v             upsert config.json key
  *   md-format <file...> [--write] normalize markdown (zero-dep)
+ *   changelog [--since <tag>]     group commits since last tag (release backing)
+ *   version-detect [dir]          find the version source + current value
+ *   onboard-scan [dir]            stack + structure + entry-point orientation blob
+ *   selfcheck                     which tools/integrations/siblings are configured
+ *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
  *   notify <slack|telegram> --text … [--confirm]    webhook post (dry-run default)
@@ -33,6 +38,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const cp = require("node:child_process");
+const os = require("node:os");
 
 const VERSION = "0.1.0";
 
@@ -311,6 +317,113 @@ function coerce(v) {
 }
 
 // ---------------------------------------------------------------------------
+// release helpers — changelog + version detection (deterministic; LLM renders prose)
+// ---------------------------------------------------------------------------
+function lastTag(dir) {
+  const r = sh("git", ["-C", dir || ".", "describe", "--tags", "--abbrev=0"]);
+  return r.status === 0 && r.stdout ? r.stdout : null;
+}
+function changelog(dir, since) {
+  dir = dir || ".";
+  if (!inRepo(dir)) die("not a git repository: " + path.resolve(dir));
+  const tag = since || lastTag(dir);
+  const range = tag ? `${tag}..HEAD` : "HEAD";
+  const r = sh("git", ["-C", dir, "log", range, "--no-merges", "--pretty=%s"]);
+  const groups = {};
+  for (const subj of r.stdout.split("\n").filter(Boolean)) {
+    const m = subj.match(/^(\w+)(\([^)]*\))?(!)?:\s*(.*)$/);
+    const type = m ? m[1].toLowerCase() : "other";
+    const bucket = ({ feat: "Added", fix: "Fixed", perf: "Changed", refactor: "Changed",
+      docs: "Docs", test: "Tests", chore: "Chore", style: "Chore" })[type] || "Other";
+    (groups[bucket] = groups[bucket] || []).push(m ? m[4] : subj);
+  }
+  return { since: tag, range, count: r.stdout.split("\n").filter(Boolean).length, groups };
+}
+function versionDetect(dir) {
+  dir = dir || ".";
+  const tries = [
+    { file: "pyproject.toml", re: /^\s*version\s*=\s*["']([^"']+)["']/m },
+    { file: "package.json", json: true, key: "version" },
+    { file: "Cargo.toml", re: /^\s*version\s*=\s*["']([^"']+)["']/m },
+  ];
+  for (const t of tries) {
+    const p = path.join(dir, t.file);
+    if (!fs.existsSync(p)) continue;
+    if (t.json) { const j = safeJSON(p); if (j && j[t.key]) return { source: t.file, version: j[t.key] }; }
+    else { const m = fs.readFileSync(p, "utf8").match(t.re); if (m) return { source: t.file, version: m[1] }; }
+  }
+  const tag = lastTag(dir);
+  return tag ? { source: "git-tag", version: tag.replace(/^v/, "") } : { source: null, version: null };
+}
+
+// ---------------------------------------------------------------------------
+// onboard-scan — one orientation blob (stack + structure + entry points)
+// ---------------------------------------------------------------------------
+function onboardScan(dir) {
+  dir = dir || ".";
+  const det = detectStack(dir);
+  const audit = structureAudit(dir);
+  const entries = [];
+  const candidates = ["main.py", "app.py", "manage.py", "src/main.rs", "cmd", "main.go",
+    "src/index.ts", "src/index.js", "index.js", "src/main.ts", "src/App.tsx"];
+  for (const c of candidates) if (fs.existsSync(path.join(dir, c))) entries.push(c);
+  let scripts = {};
+  const pkg = safeJSON(path.join(dir, "package.json"));
+  if (pkg && pkg.scripts) scripts = pkg.scripts;
+  return {
+    dir: path.resolve(dir),
+    languages: det.languages, stacks: det.stacks, monorepo: det.monorepo,
+    compliance_score: audit.compliance_score,
+    entry_points: entries,
+    scripts,
+    version: versionDetect(dir),
+    doc_gaps: audit.gaps.filter((g) => g.severity === "error").map((g) => g.path),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// selfcheck — which integrations/tools are configured (never calls out)
+// ---------------------------------------------------------------------------
+function selfcheck() {
+  const env = process.env;
+  return {
+    tools: { gh: ghAvailable(), gitnexus: have("gitnexus"), graphify: have("graphify"),
+      deno: sh("deno", ["--version"]).status === 0, semgrep: sh("semgrep", ["--version"]).status === 0 },
+    integrations: {
+      jira: !!(env.JIRA_BASE_URL && env.JIRA_EMAIL && env.JIRA_TOKEN),
+      slack: !!env.SLACK_WEBHOOK_URL,
+      telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
+      sonar: !!(env.SONAR_HOST_URL && env.SONAR_TOKEN),
+    },
+    siblings: {
+      sb: fs.existsSync(path.join(os.homedir(), ".claude", "skills", "sb")),
+      unabridged: fs.existsSync(path.join(os.homedir(), ".claude", "skills", "unabridged")),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// bridge — detect sibling skills + describe handoffs
+// ---------------------------------------------------------------------------
+function bridge(args) {
+  const f = flags(args);
+  const sub = f._[0] || "status";
+  const sc = selfcheck();
+  if (sub === "status") {
+    return {
+      siblings: sc.siblings,
+      handoffs: {
+        sb: sc.siblings.sb ? "journal/adr/review/decision artifacts -> /sb:sync-project ingests into the vault"
+          : "sb not installed (optional)",
+        unabridged: sc.siblings.unabridged ? "full-output families (plan execute, onboard, scaffold) honor the no-truncation rule"
+          : "unabridged not installed (optional)",
+      },
+    };
+  }
+  return { ok: false, reason: "usage: bridge <status>" };
+}
+
+// ---------------------------------------------------------------------------
 // markdown formatter (zero-dep, conservative)
 // ---------------------------------------------------------------------------
 function formatMarkdown(src) {
@@ -518,7 +631,7 @@ async function httpJSON(method, url, auth, body) {
 // ---------------------------------------------------------------------------
 // dispatch
 // ---------------------------------------------------------------------------
-(async function main() {
+async function main() {
   const f = flags(rest);
   switch (cmd) {
     case "version": return out({ name: "ca-tools", version: VERSION });
@@ -529,12 +642,28 @@ async function httpJSON(method, url, auth, body) {
     case "state-read": return out(stateRead(f._[0] || "."));
     case "state-write": return out(stateWrite(f._[0] || ".", f.key, f.value));
     case "md-format": return out(mdFormatCmd(f));
+    case "changelog": return out(changelog(f._[0] || ".", f.since));
+    case "version-detect": return out(versionDetect(f._[0] || "."));
+    case "onboard-scan": return out(onboardScan(f._[0] || "."));
+    case "selfcheck": return out(selfcheck());
     case "github": return out(github(rest));
     case "track": return out(await track(rest));
     case "notify": return out(await notify(rest));
     case "scan": return out(await scan(rest));
     case "graph": return out(graph(rest));
+    case "bridge": return out(bridge(rest));
     case undefined: return die("no command. see header for usage.", 2);
     default: return die("unknown command: " + cmd, 2);
   }
-})().catch((e) => die(e.stack || String(e)));
+}
+
+// Run as a CLI when invoked directly; export pure helpers when require()d (tests).
+if (require.main === module) {
+  main().catch((e) => die(e.stack || String(e)));
+} else {
+  module.exports = {
+    detectStack, classifyFile, structureAudit, structureScaffold,
+    formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
+    track, notify, bridge, flags,
+  };
+}

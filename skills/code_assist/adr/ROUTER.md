@@ -6,7 +6,7 @@ type: router
 
 # ADR Router
 
-Load `_shared/conventions.md`. ADRs live in **`docs/adr/`** (standardize; if the repo uses
+Load `_shared/discipline.md` + `_shared/conventions.md`. ADRs live in **`docs/adr/`** (standardize; if the repo uses
 `docs/decisions/`, keep writing there but note the split for `structure fix`).
 
 | Situation | Load | Command |
