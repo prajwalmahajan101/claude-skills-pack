@@ -6,6 +6,8 @@ type: router
 
 # Format Router
 
+Load `_shared/discipline.md` + `_shared/conventions.md` first.
+
 | Action | How | Command |
 |---|---|---|
 | Format markdown | `node bin/ca-tools.js md-format <file...> [--write]` | `/code_assist:format` |
