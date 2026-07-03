@@ -35,8 +35,8 @@ function main() {
   const rel = path.relative(VAULT, file);
   if (rel.startsWith("..") || path.isAbsolute(rel)) return; // outside vault
   const top = rel.split(path.sep)[0];
-  const CHECK = new Set(["03_Lessons", "04_Topics", "02_Projects", "10_Memory",
-    "11_Decisions", "12_People", "13_Meetings", "14_Zettelkasten", "15_Habits"]);
+  const CHECK = new Set(["03_Lessons", "04_Topics", "02_Projects", "08_Insights", "10_Memory",
+    "11_Decisions", "12_People", "13_Meetings", "14_Zettelkasten", "15_Habits", "16_Ideas"]);
   if (!CHECK.has(top)) return; // conversations/inbox/exports/templates are exempt
   // Within 02_Projects, only validate hand-authored notes (tasks, decisions).
   // Skip scaffolding/plans and the journal/ + reviews/ mirrors (auto-generated

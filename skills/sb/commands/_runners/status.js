@@ -57,7 +57,10 @@ const zettels = safe(() => countMd(p.zettel), 0);
 const meetings = safe(() => countMd(p.meetings), 0);
 const people = safe(() => countMd(p.people), 0);
 const habitsN = safe(() => countMd(p.habits), 0);
+const ideasN = safe(() => countMd(p.ideas), 0);
+const synthesisN = safe(() => countByType(p.insights, "synthesis"), 0);
 const unverified = safe(() => countUnverified(), 0);
+const evalR5 = safe(() => lastEvalRecall5(), null);
 
 const lines = [
   `Project: ${slug}  (${cwd})`,
@@ -75,7 +78,9 @@ const lines = [
   ``,
   `Knowledge base:`,
   `  Zettels: ${zettels}  Meetings: ${meetings}  People: ${people}  Habits: ${habitsN}`,
+  `  Ideas: ${ideasN}  Synthesis pages: ${synthesisN}`,
   `  Unverified notes (review): ${unverified}`,
+  `  Retrieval recall@5: ${evalR5 == null ? "(run /sb:eval)" : evalR5}`,
   ``,
   `External memory:`,
   `  Harness memory facts:      ${memFacts}`,
@@ -86,6 +91,22 @@ console.log(lines.join("\n"));
 
 function safe(fn, fallback) { try { return fn(); } catch { return fallback; } }
 function countMd(dir) { return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).length : 0; }
+function countByType(dir, type) {
+  if (!fs.existsSync(dir)) return 0;
+  let n = 0;
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".md")) continue;
+    try { if (new RegExp(`^type:\\s*${type}\\b`, "m").test(fs.readFileSync(path.join(dir, f), "utf8"))) n++; } catch {}
+  }
+  return n;
+}
+function lastEvalRecall5() {
+  const file = path.join(p.meta, "eval-results.json");
+  if (!fs.existsSync(file)) return null;
+  const r = JSON.parse(fs.readFileSync(file, "utf8"));
+  const v = r.recall_at_5 != null ? r.recall_at_5 : (r.overall && r.overall.recall ? r.overall.recall[5] : null);
+  return v == null ? null : v;
+}
 function countUnverified() {
   let n = 0;
   const stack = [VAULT];
