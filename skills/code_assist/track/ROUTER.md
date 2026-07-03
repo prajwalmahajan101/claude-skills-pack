@@ -6,6 +6,8 @@ type: router
 
 # Track Router
 
+Load `_shared/discipline.md` first.
+
 Thin REST client in `ca-tools.js` (no MCP). Configured via env:
 `JIRA_BASE_URL` + `JIRA_EMAIL` + `JIRA_TOKEN`. No tokens -> commands no-op with a setup hint.
 The same shape extends to Linear / GitHub Issues adapters.

@@ -6,6 +6,8 @@ type: router
 
 # Scan Router
 
+Load `_shared/discipline.md` first.
+
 Read-only static-analysis pull. Config via env: `SONAR_HOST_URL` + `SONAR_TOKEN`
 (+ `SONAR_PROJECT_KEY` or `--project`).
 

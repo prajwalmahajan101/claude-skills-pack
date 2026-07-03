@@ -6,6 +6,8 @@ type: router
 
 # Notify Router
 
+Load `_shared/discipline.md` first.
+
 Webhook POST from `ca-tools.js`. Config via env:
 - Slack: `SLACK_WEBHOOK_URL`.
 - Telegram: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.

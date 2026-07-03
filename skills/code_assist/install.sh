@@ -29,6 +29,10 @@ done
 
 echo
 say "code_assist installed."
+CMD_COUNT=$(ls "$COMMANDS_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
 echo "  Skill:    $SKILL_LINK"
 echo "  Agents:   architectural-reviewer, commit-planner, journal-writer"
-echo "  Commands: /code_assist:code_review[_backend|_frontend|_tui], /code_assist:git_commit[_plan], /code_assist:journal"
+echo "  Commands: $CMD_COUNT slash commands across families —"
+echo "            commit, code_review, journal, plan, debug, adr, verify, structure,"
+echo "            format, github, track, notify, scan, graph, onboard, test, refactor,"
+echo "            release, domains, flow (run /code_assist:<name>)."

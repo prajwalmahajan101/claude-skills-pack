@@ -6,7 +6,11 @@ type: router
 
 # Release Router
 
-Load `_shared/conventions.md`. SemVer + Keep a Changelog.
+Load `_shared/discipline.md` + `_shared/conventions.md`. SemVer + Keep a Changelog.
+
+Release is **LLM-driven judgment** (version decision, changelog prose) plus plain `git`/`gh` -
+there is intentionally no `ca-tools` subcommand for it; the deterministic backbone is used only
+for the pre-release `land` checks (structure/scan/diff), not for authoring the release.
 
 | Step | Load | Command |
 |---|---|---|

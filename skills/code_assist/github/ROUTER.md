@@ -6,6 +6,8 @@ type: router
 
 # GitHub Router
 
+Load `_shared/discipline.md` + `_shared/conventions.md` first.
+
 Uses the `gh` CLI only - no MCP, no extra dependency. Reads run live; writes are
 confirm-gated.
 

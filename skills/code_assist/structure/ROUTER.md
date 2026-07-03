@@ -6,8 +6,8 @@ type: router
 
 # Structure Router
 
-Load `_shared/conventions.md`. The canonical structure was derived from auditing the
-user's project portfolio; templates live in `structure/templates/`.
+Load `_shared/discipline.md` + `_shared/conventions.md`. The canonical structure was derived
+from auditing the user's project portfolio; templates live in `structure/templates/`.
 
 | Situation | Load | Command |
 |---|---|---|
