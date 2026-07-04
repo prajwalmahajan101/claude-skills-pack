@@ -1,7 +1,7 @@
 {
   "name": "sb",
   "description": "Second-brain skill — captures every Claude Code conversation into a project-scoped Obsidian vault. Mines lessons, topics, tasks, kanban, and connections. Holds knowledge handed to it via a generic ingest primitive (the sutra orchestrator feeds it parsed repo artifacts). Self-healing vault-repair + project-linkage maintenance and optional auto lesson-mining. Subcommands under /sb:.",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "author": { "name": "Prajwal Mahajan" },
   "keywords": [
     "second-brain", "obsidian", "notes", "lessons", "tasks", "kanban", "memory", "vault", "capture"
