@@ -23,7 +23,12 @@ try {
   const { spawnSync } = require("node:child_process");
 
   const SKILL_LIB = path.join(__dirname, "..", "lib");
-  const { readSessionMap, writeSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
+  const { readSessionMap, updateSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
+  // Mark a session mined under the session-map lock, merging onto the latest entry so
+  // a concurrent capture write (byteOffset/turnCount) to the same key isn't clobbered.
+  const markMined = (sid, entry) => updateSessionMap((m) => {
+    m[sid] = { ...(m[sid] || entry), lessonsMined: true, lessonsMinedAt: new Date().toISOString() };
+  });
 
   const LESSONS_DIR = path.join(os.homedir(), ".claude", "lessons");
   const INDEX = path.join(LESSONS_DIR, "INDEX.md");
@@ -69,8 +74,7 @@ try {
       timeout: 120000,
     });
     // Mark mined regardless of outcome so we never re-spend on the same session.
-    map[sid] = { ...entry, lessonsMined: true, lessonsMinedAt: new Date().toISOString() };
-    if (r.status !== 0 || !r.stdout) { writeSessionMap(map); continue; }
+    if (r.status !== 0 || !r.stdout) { markMined(sid, entry); continue; }
 
     const lessons = parseLessons(r.stdout);
     for (const l of lessons) {
@@ -82,7 +86,7 @@ try {
       fs.writeFileSync(file, l.body);
       appendIndex(INDEX, `- \`${slug}.md\` — [${l.tag}] ${l.summary}\n`);
     }
-    writeSessionMap(map);
+    markMined(sid, entry);
   }
   process.exit(0);
 

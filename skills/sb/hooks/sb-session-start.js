@@ -8,7 +8,7 @@ const path = require("node:path");
 const os = require("node:os");
 
 const SKILL_LIB = path.join(__dirname, "..", "lib");
-const { ensureDirs, projectSlugFromCwd, paths, readSessionMap, writeSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
+const { ensureDirs, projectSlugFromCwd, paths, readSessionMap, updateSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 const { updateFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 
 // Optional bridges to the external memory systems (best-effort; absent-safe).
@@ -90,8 +90,8 @@ function main() {
       // Backlink predecessor → new
       markSessionEnded(predecessor.sid, "cleared", predecessor.entry.endedAt, { clearedTo: newSessionId });
       // Stash for sb-capture to apply `cleared_from` when it creates the new conv file.
-      fresh[newSessionId] = { ...(fresh[newSessionId] || {}), clearedFrom: predecessor.sid };
-      writeSessionMap(fresh);
+      // Locked RMW so a concurrent capture write to another key isn't clobbered.
+      updateSessionMap((m) => { m[newSessionId] = { ...(m[newSessionId] || {}), clearedFrom: predecessor.sid }; });
     }
   }
 }

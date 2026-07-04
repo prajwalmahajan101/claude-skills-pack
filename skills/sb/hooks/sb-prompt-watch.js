@@ -8,7 +8,7 @@ const path = require("node:path");
 const os = require("node:os");
 
 const SKILL_LIB = path.join(__dirname, "..", "lib");
-const { readSessionMap, writeSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
+const { updateSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
 
 try { main(); } catch (e) { logErr(e); }
 
@@ -22,12 +22,12 @@ function main() {
   // Only flag explicit clear commands.
   if (!/^\s*\/clear\b/i.test(prompt)) return;
 
-  const map = readSessionMap();
-  const entry = map[sessionId] || {};
-  entry.pendingClear = true;
-  entry.pendingClearAt = new Date().toISOString();
-  map[sessionId] = entry;
-  writeSessionMap(map);
+  updateSessionMap((map) => {
+    const entry = map[sessionId] || {};
+    entry.pendingClear = true;
+    entry.pendingClearAt = new Date().toISOString();
+    map[sessionId] = entry;
+  });
 }
 
 function readStdinSync() {
