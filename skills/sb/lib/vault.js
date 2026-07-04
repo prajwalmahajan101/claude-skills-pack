@@ -45,7 +45,10 @@ function projectSlugFromCwd(cwd) {
     try {
       const aliases = JSON.parse(fs.readFileSync(aliasFile, "utf8"));
       if (aliases[cwd]) return slugify(aliases[cwd]);
-    } catch {}
+    } catch (e) {
+      // A corrupt alias file silently reroutes notes to a different slug — surface it.
+      logDiag(`project-aliases.json unreadable (${e.message}) — alias routing disabled for ${cwd}`);
+    }
   }
 
   // 2. Home dir special case (real work is regularly done from ~).
@@ -205,6 +208,17 @@ function ensureDirs(projectSlug) {
   return p;
 }
 
+// Append a one-line diagnostic to the sb log. Best-effort; never throws. Used for
+// integrity-relevant failures that would otherwise be swallowed (corrupt config that
+// silently changes note routing, skipped rewrites under --apply, etc).
+function logDiag(msg) {
+  try {
+    const log = path.join(os.homedir(), ".claude", "cache", "sb.log");
+    fs.mkdirSync(path.dirname(log), { recursive: true });
+    fs.appendFileSync(log, `${new Date().toISOString()} ${msg}\n`);
+  } catch {}
+}
+
 function readJSON(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); }
   catch { return fallback; }
@@ -302,6 +316,6 @@ module.exports = {
   expandHome, slugify, projectSlugFromCwd,
   paths, ensureDirs,
   readJSON, writeJSON, readSessionMap, writeSessionMap, updateSessionMap,
-  exists,
+  exists, logDiag,
   markSessionEnded,
 };
