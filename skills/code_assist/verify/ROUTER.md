@@ -25,6 +25,11 @@ that passed, the app behaving correctly. Not "it should work", not a prior run, 
 5. **Report** - quote the evidence. If everything passes, state completion plainly. If not,
    list what failed with the output and route back to `debug` or `plan`.
 
+## Execution Mode - Agent Dispatch
+Delegate to the **`ca-verifier`** subagent (`subagent_type: ca-verifier`, pass `repo` + `goal`)
+to gather evidence out-of-context and return a per-facet VERIFIED/PARTIAL/FAILED verdict. Quick
+checks: run inline.
+
 ## Rules
 - Never claim done on unrun code. If you cannot run it, say exactly why and what remains.
 - Re-run the project's full test + lint + type check if the change is non-trivial.

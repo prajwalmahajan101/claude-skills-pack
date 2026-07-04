@@ -26,6 +26,12 @@ into `write.md`. Never skip straight to code.
 `.code_assist/.plan/<slug>.md`. Execution does not begin until the user approves the
 written plan. A plan described only in chat is not approval.
 
+## Execution Mode - Agent Dispatch
+For a larger initiative, delegate the `write` phase to the **`ca-planner`** subagent
+(`subagent_type: ca-planner`, pass `repo` + `direction`) so plan authoring stays out of the
+main context. It writes `.code_assist/.plan/<slug>.md` and stops at the approval gate. Small
+tasks: run inline. Never let the agent begin execution - approval stays with the user.
+
 ## Handoff
 After execution: `verify` (Iron Law #3) → `commit` → `journal`. See
 `_shared/discipline.md` family-chaining.
