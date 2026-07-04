@@ -587,7 +587,10 @@ function secretScan(args) {
   if (f.staged) {
     mode = "staged";
     if (!inRepo(dir)) return { ok: false, reason: "not a git repository" };
-    const r = sh("git", ["-C", dir, "diff", "--cached", "--name-only", "--diff-filter=ACM"]);
+    // Include R (renames): a rename+edit staged as R would otherwise be skipped,
+    // silently leaving a secret unscanned. --name-only reports the new path, which
+    // `git show :path` resolves against the index.
+    const r = sh("git", ["-C", dir, "diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
     files = r.stdout.split("\n").filter(Boolean);
     if (maxFiles > 0 && files.length > maxFiles) { truncated = files.length - maxFiles; files = files.slice(0, maxFiles); }
     for (const file of files) { const c = stagedContent(dir, file, maxFiles > 0 ? 3000 : 0); if (c != null) scanText(c, file, findings, ignore); }
@@ -899,7 +902,13 @@ function scan(args) {
 // Both are optional external CLIs; degrade gracefully when absent. All actions
 // here are READ-ONLY analysis (indexing writes only to the tool's own cache).
 // ---------------------------------------------------------------------------
-function have(bin) { return sh(bin, ["--version"]).status === 0 || sh(bin, ["--help"]).status === 0; }
+const _haveCache = new Map();
+function have(bin) {
+  if (_haveCache.has(bin)) return _haveCache.get(bin);
+  const ok = sh(bin, ["--version"]).status === 0 || sh(bin, ["--help"]).status === 0;
+  _haveCache.set(bin, ok);
+  return ok;
+}
 
 function graph(args) {
   const f = flags(args);

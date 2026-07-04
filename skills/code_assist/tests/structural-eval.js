@@ -32,18 +32,18 @@ for (const f of fs.readdirSync(cmdDir).filter((x) => x.endsWith(".md"))) {
   else fail(`command ${f} references missing ${m[1]}`);
 }
 
-// 2. every family ROUTER.md loads discipline (families that have a ROUTER)
-const FAMILY_DIRS = fs.readdirSync(ROOT, { withFileTypes: true })
-  .filter((e) => e.isDirectory() && !["bin", "_shared", "commands", "agents", "tests",
-    "structure", "domains", "orchestrator", ".claude-plugin", "hooks", "git-commit",
-    "code-review", "journal"].includes(e.name))
+// 2. every family ROUTER.md must load discipline, EXCEPT an explicit exempt set.
+// Derived from disk (not a hardcoded include-list), so a NEW family that forgets
+// _shared/discipline.md is caught by default — only known exemptions are listed.
+const DISCIPLINE_EXEMPT = new Set([
+  "code-review", "domains", "git-commit", "graph", "journal", "onboard", "refactor", "test",
+]);
+const routerFamilies = fs.readdirSync(ROOT, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && fs.existsSync(path.join(ROOT, e.name, "ROUTER.md")))
   .map((e) => e.name);
-// explicit families with routers (new + integration) that must load discipline
-const MUST_DISCIPLINE = ["plan", "debug", "adr", "verify", "structure", "format",
-  "github", "track", "notify", "scan", "release", "secure", "incident"];
-for (const fam of MUST_DISCIPLINE) {
+for (const fam of routerFamilies) {
   const r = path.join(ROOT, fam, "ROUTER.md");
-  if (!fs.existsSync(r)) { fail(`family ${fam} missing ROUTER.md`); continue; }
+  if (DISCIPLINE_EXEMPT.has(fam)) { ok(`${fam} exempt from discipline (documented)`); continue; }
   if (read(r).includes("_shared/discipline.md")) ok(`${fam} loads discipline`);
   else fail(`${fam}/ROUTER.md does not load _shared/discipline.md`);
 }
