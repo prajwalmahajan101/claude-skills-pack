@@ -18,9 +18,13 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+// Resolve the skill's lib relative to this file, not to a fixed ~/.claude path.
+// Installed, commands/_runners/../../lib is exactly ~/.claude/skills/sb/lib, so
+// this is a superset of the other runners' os.homedir() pattern — it additionally
+// works from an in-repo checkout, which the sutra payload↔ingest contract test
+// depends on. (The sibling runners still use the homedir form; harmless drift.)
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { ensureDirs } = require(path.join(SKILL_LIB, "vault.js"));
 const { fm, parseFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 const { preambleBlock } = require(path.join(SKILL_LIB, "ai-first.js"));
