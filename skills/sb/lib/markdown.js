@@ -13,6 +13,12 @@ function fm(obj) {
       for (const item of v) lines.push(`  - ${quote(item)}`);
       continue;
     }
+    if (typeof v === "object") {
+      // One level of nested map, symmetric with parseFrontmatter's nested read.
+      lines.push(`${k}:`);
+      for (const [sk, sv] of Object.entries(v)) lines.push(`  ${sk}: ${quote(sv)}`);
+      continue;
+    }
     lines.push(`${k}: ${quote(v)}`);
   }
   lines.push("---");
