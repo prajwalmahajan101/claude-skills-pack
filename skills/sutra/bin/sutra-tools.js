@@ -33,7 +33,7 @@ const path = require("node:path");
 const cp = require("node:child_process");
 const os = require("node:os");
 
-const VERSION = "0.1.0";
+const VERSION = "1.0.0";
 
 // Skill layout: <skillRoot>/bin/sutra-tools.js  →  skillRoot is one level up.
 const SKILL_ROOT = path.dirname(__dirname);
