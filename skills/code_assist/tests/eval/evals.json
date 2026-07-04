@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "about": "LLM-graded behavioral evals for code_assist. Each case drives `claude -p` with a family's discipline in scope, then checks the response two ways: deterministic token assertions (forbid/require) and an LLM grader (grader.md rubric). Opt-in and token-costing — run via `make eval-llm`.",
+    "howItWorks": "run-evals.js builds a prompt that puts the named family/agent's ROUTER + _shared/discipline.md + _shared/conventions.md in scope, feeds the user `prompt`, captures the model's first response, applies `assert`, then (unless --no-grade) grades against `rubric`.",
+    "passWhen": "every hard assertion holds AND the grader verdict is `pass` (score >= threshold, default 7)."
+  },
+  "cases": [
+    {
+      "id": "commit-no-ai-footer",
+      "family": "git-commit",
+      "prompt": "Commit my staged changes. I added a rate limiter to the API gateway and fixed a null check in the auth middleware.",
+      "assert": {
+        "forbid": ["Co-Authored-By", "Generated with Claude", "Co-authored-by"],
+        "requireAny": ["feat", "fix", "atomic", "Conventional"]
+      },
+      "rubric": "Must propose Conventional-Commit message(s), split unrelated changes into atomic commits, and MUST NOT append any AI-attribution footer (Co-Authored-By / Generated with Claude). Never commits to main without a feature branch."
+    },
+    {
+      "id": "plan-no-code-before-approval",
+      "family": "plan",
+      "prompt": "Plan how to add multi-tenant support to our billing service, then start implementing it.",
+      "assert": {
+        "forbid": ["```diff", "Here is the implementation", "I've implemented"],
+        "requireAny": ["approv", "plan mode", "brainstorm", "before", "gate"]
+      },
+      "rubric": "Must treat planning as a hard gate: brainstorm/write the plan and require explicit approval BEFORE writing any code. Must not jump straight to an implementation despite the 'then start implementing it' bait."
+    },
+    {
+      "id": "debug-no-fix-before-root-cause",
+      "family": "debug",
+      "prompt": "Our checkout endpoint returns 500 intermittently. Just add a try/catch and a retry so it stops erroring.",
+      "assert": {
+        "forbid": ["I'll wrap it in try/catch now", "adding the retry"],
+        "requireAny": ["reproduce", "root cause", "hypothes", "evidence", "regression test"]
+      },
+      "rubric": "Must refuse to slap on a try/catch or retry as a fix. Must insist on reproducing the failure and proving a root cause via falsifiable hypotheses before any fix, and add a regression test. Swallowing the error is explicitly wrong."
+    },
+    {
+      "id": "verify-evidence-not-assertion",
+      "family": "verify",
+      "prompt": "I think the caching fix is done. Mark it verified.",
+      "assert": {
+        "forbid": ["Marked verified.", "It's done."],
+        "requireAny": ["evidence", "run", "observe", "goal", "how do we know", "reproduce"]
+      },
+      "rubric": "Must not declare done on assertion alone. Must demand fresh, observable evidence tied to the original goal (run it, observe behavior) before claiming verification."
+    },
+    {
+      "id": "adr-structured-decision",
+      "family": "adr",
+      "prompt": "We decided to use Postgres instead of DynamoDB for the orders service. Record that.",
+      "assert": {
+        "forbid": [],
+        "requireAny": ["Context", "Decision", "Consequences", "docs/adr", "0001", "numbered"]
+      },
+      "rubric": "Must produce/append a numbered ADR under docs/adr with Context / Decision / Consequences structure, capturing the alternative (DynamoDB) and rationale."
+    },
+    {
+      "id": "structure-audit-before-scaffold",
+      "family": "structure",
+      "prompt": "Is my repo set up right? It's a Python service.",
+      "assert": {
+        "forbid": ["I'll scaffold a new project", "Creating the project"],
+        "requireAny": ["audit", "score", "compliance", "gaps", "existing"]
+      },
+      "rubric": "Must AUDIT the existing layout (score + gaps) rather than blindly scaffolding over it. Scaffold is only for empty/new repos; an existing repo gets an audit with a compliance score and gap list."
+    },
+    {
+      "id": "release-changelog-from-commits",
+      "family": "release",
+      "prompt": "Cut a release for this repo.",
+      "assert": {
+        "forbid": [],
+        "requireAny": ["changelog", "version", "Conventional", "tag", "since", "git log"]
+      },
+      "rubric": "Must derive the changelog from Conventional-Commit history since the last tag, detect and bump the version source, and tag — not hand-wave a version. Uses the deterministic ca-tools changelog/version-detect backbone."
+    },
+    {
+      "id": "onboard-read-before-generate",
+      "family": "onboard",
+      "prompt": "Generate a CLAUDE.md for this codebase.",
+      "assert": {
+        "forbid": ["Here's a generic CLAUDE.md template"],
+        "requireAny": ["scan", "detect", "stack", "entry point", "read", "explore"]
+      },
+      "rubric": "Must actually orient in the repo first (stack detect, entry points, structure scan via onboard-scan) before generating a grounded CLAUDE.md — not emit a generic template."
+    }
+  ]
+}

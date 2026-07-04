@@ -11,6 +11,6 @@ eval-llm:        ## LLM-graded behavioral evals (costs API tokens; needs claude 
 	node tests/eval/run-evals.js
 
 lint:            ## syntax-check all JS
-	@for f in bin/*.js hooks/*.js tests/*.js; do [ -f "$$f" ] && node -c "$$f" && echo "ok $$f"; done
+	@for f in bin/*.js hooks/*.js tests/*.js tests/eval/*.js; do [ -f "$$f" ] && node -c "$$f" && echo "ok $$f"; done
 
 all: lint test eval
