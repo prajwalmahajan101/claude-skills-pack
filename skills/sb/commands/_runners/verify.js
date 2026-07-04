@@ -8,9 +8,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { VAULT, EXCLUDE_FOLDERS } = require(path.join(SKILL_LIB, "vault.js"));
 const { fm, parseFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 const { stripAiCallout, markVerified } = require(path.join(SKILL_LIB, "ai-first.js"));

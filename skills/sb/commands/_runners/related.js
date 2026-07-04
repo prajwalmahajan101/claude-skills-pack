@@ -8,9 +8,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { VAULT } = require(path.join(SKILL_LIB, "vault.js"));
 const { loadEmbeddings, nearest, hasEmbeddings } = require(path.join(SKILL_LIB, "embeddings.js"));
 const { loadIndex, retrieve } = require(path.join(SKILL_LIB, "retriever.js"));

@@ -13,7 +13,6 @@ if (process.env.SB_DISABLE === "1" || process.env.SB_VALIDATE_DISABLE === "1") p
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
 try { main(); } catch { /* never block */ }
 process.exit(0);
@@ -24,7 +23,7 @@ function main() {
   const file = hook?.tool_input?.file_path || hook?.args?.file_path || "";
   if (!file || !file.endsWith(".md") || !fs.existsSync(file)) return;
 
-  const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+  const SKILL_LIB = path.join(__dirname, "..", "lib");
   let VAULT, validateNote;
   try {
     ({ VAULT } = require(path.join(SKILL_LIB, "vault.js")));

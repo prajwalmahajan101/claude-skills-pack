@@ -4,9 +4,8 @@
 //                         [--relationship weak|medium|strong] [--log "<interaction>"]
 
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { VAULT } = require(path.join(SKILL_LIB, "vault.js"));
 const { tagFile } = require(path.join(SKILL_LIB, "tagger.js"));
 const { ensurePerson, logInteraction } = require(path.join(SKILL_LIB, "people.js"));

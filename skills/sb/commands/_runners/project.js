@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { paths, readSessionMap, VAULT, DIR } = require(path.join(SKILL_LIB, "vault.js"));
 const { countKanban } = require(path.join(SKILL_LIB, "kanban.js"));
 

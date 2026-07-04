@@ -2,10 +2,9 @@
 // /sb:weekly — 7-day rollup synthesized via claude -p, written to reviews/<YYYY-WNN>.md.
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 const { spawnSync } = require("node:child_process");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { VAULT, paths, readSessionMap, DIR } = require(path.join(SKILL_LIB, "vault.js"));
 const P = paths("_");
 const { parseFrontmatter, fm } = require(path.join(SKILL_LIB, "markdown.js"));

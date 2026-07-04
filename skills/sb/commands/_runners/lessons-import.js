@@ -8,9 +8,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { paths } = require(path.join(SKILL_LIB, "vault.js"));
 const { parseFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 const { importToVault, pushPointer, lessonsDir } = require(path.join(SKILL_LIB, "lessons-bridge.js"));
