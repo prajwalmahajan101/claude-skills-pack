@@ -1,0 +1,28 @@
+{
+  "_comment": "Plugin-format hooks for code_assist. Claude Code resolves ${CLAUDE_PLUGIN_ROOT} to this skill's root when loaded as a plugin. Both hooks honor CA_DISABLE=1; ca-git-guard hard-blocks only under CA_GIT_GUARD_STRICT=1.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ca-session-start.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ca-git-guard.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

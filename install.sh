@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # claude-skills-pack — top-level installer.
 # Usage:
-#   ./install.sh            # interactive prompt per skill
-#   ./install.sh --all      # install every skill non-interactively
+#   ./install.sh            # interactive prompt per skill, then offer marketplace
+#   ./install.sh --all      # install every skill + register the marketplace
 #   ./install.sh sb code_assist   # install only the named skills
+#   ./install.sh --marketplace    # only (re)register the plugin marketplace
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,8 +25,36 @@ run_installer() {
   echo
 }
 
+# Register this repo as a Claude Code plugin marketplace (idempotent; best-effort).
+# The manifest at .claude-plugin/marketplace.json lists all three plugins.
+register_marketplace() {
+  if ! command -v claude >/dev/null 2>&1; then
+    skip "claude CLI not on PATH — skipped marketplace registration."
+    echo "     To register later:  claude plugin marketplace add \"$HERE\""
+    return 0
+  fi
+  say "Registering plugin marketplace → claude plugin marketplace add"
+  if claude plugin marketplace add "$HERE" 2>/dev/null; then
+    ok "marketplace registered (claude-skills-pack)"
+  else
+    # Already added, or the CLI version differs — refresh, else print the manual command.
+    if claude plugin marketplace update claude-skills-pack >/dev/null 2>&1; then
+      ok "marketplace already present — refreshed"
+    else
+      skip "could not auto-register; run:  claude plugin marketplace add \"$HERE\""
+    fi
+  fi
+  echo "     Then install a plugin:  /plugin install code_assist@claude-skills-pack"
+}
+
+if [ "${1:-}" = "--marketplace" ]; then
+  register_marketplace
+  exit 0
+fi
+
 if [ "${1:-}" = "--all" ]; then
   for s in "${SKILLS[@]}"; do run_installer "$s"; done
+  register_marketplace
   exit 0
 fi
 
@@ -50,5 +79,11 @@ for s in "${SKILLS[@]}"; do
     *)     run_installer "$s" ;;
   esac
 done
+
+read -r -p "Register the plugin marketplace (claude plugin marketplace add)? [Y/n] " ans
+case "${ans:-Y}" in
+  [Nn]*) skip "marketplace — skipped" ;;
+  *)     register_marketplace ;;
+esac
 
 say "All selections processed."

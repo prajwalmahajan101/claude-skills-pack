@@ -34,3 +34,5 @@ checks: run inline.
 - Never claim done on unrun code. If you cannot run it, say exactly why and what remains.
 - Re-run the project's full test + lint + type check if the change is non-trivial.
 - Prefer end-to-end/integration evidence over asserting from reading the diff.
+
+> **Bridge:** on a proven result, offer `/sb:lesson "<title>"` to capture the takeaway (when `sb` is installed). See `bridge/ROUTER.md`.

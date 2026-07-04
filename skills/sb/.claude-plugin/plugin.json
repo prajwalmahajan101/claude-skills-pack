@@ -1,0 +1,9 @@
+{
+  "name": "sb",
+  "description": "Second-brain skill — captures every Claude Code conversation into a project-scoped Obsidian vault. Mines lessons, topics, tasks, kanban, and connections; syncs project journals/ADRs/reviews into the vault. Subcommands under /sb:.",
+  "version": "0.9.0",
+  "author": { "name": "Prajwal Mahajan" },
+  "keywords": [
+    "second-brain", "obsidian", "notes", "lessons", "tasks", "kanban", "memory", "vault", "capture"
+  ]
+}

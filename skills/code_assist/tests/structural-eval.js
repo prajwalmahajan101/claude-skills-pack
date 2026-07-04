@@ -75,6 +75,27 @@ if (fs.existsSync(checker)) {
   ok("placeholder check skipped (unabridged not installed)");
 }
 
+// 5. plugin manifests + hooks + bridge are present and valid JSON
+function checkJSON(rel, label) {
+  const p = path.join(ROOT, rel);
+  if (!fs.existsSync(p)) { fail(`${label} missing: ${rel}`); return; }
+  try { JSON.parse(read(p)); ok(`${label} valid: ${rel}`); }
+  catch (e) { fail(`${label} invalid JSON: ${rel} (${e.message})`); }
+}
+checkJSON(".claude-plugin/plugin.json", "plugin manifest");
+checkJSON("hooks/hooks.json", "hooks manifest");
+// repo-root marketplace (two levels up from the skill dir)
+const marketplace = path.join(ROOT, "..", "..", ".claude-plugin", "marketplace.json");
+if (fs.existsSync(marketplace)) {
+  try { JSON.parse(read(marketplace)); ok("marketplace.json valid"); }
+  catch (e) { fail(`marketplace.json invalid JSON (${e.message})`); }
+} else ok("marketplace.json check skipped (not in pack layout)");
+// hook scripts + bridge doc exist
+for (const h of ["hooks/ca-session-start.js", "hooks/ca-git-guard.js", "bridge/ROUTER.md"]) {
+  if (fs.existsSync(path.join(ROOT, h))) ok(`present: ${h}`);
+  else fail(`missing: ${h}`);
+}
+
 // report
 console.log(`structural-eval: ${oks.length} passed, ${fails.length} failed`);
 if (fails.length) {

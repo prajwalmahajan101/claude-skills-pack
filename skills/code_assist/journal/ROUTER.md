@@ -13,7 +13,7 @@ Pick exactly one sub-skill and follow it. Do not duplicate its logic here.
 | Trigger phrases / state | Sub-skill file |
 |---|---|
 | "start journal", "new journal", "create entry", "open phase", no `M<phase>.md` exists yet | `new.md` |
-| default — "journal this", "log this", "update journal", "ratify", "close out", `M<phase>.md` already exists | `update.md` |
+| default - "journal this", "log this", "update journal", "ratify", "close out", `M<phase>.md` already exists | `update.md` |
 
 ## How to Use
 
@@ -36,8 +36,8 @@ You may delegate to the `journal-writer` subagent instead of running the sub-ski
 - The user invoked `/code_assist:journal` without further conversation context to preserve.
 
 **When NOT to delegate:**
-- The user is mid-conversation describing a problem they hit — that prose is the journal content and lives in the main session. Capture it inline.
-- Quick single-line `## Journal` appends — agent overhead isn't worth it.
+- The user is mid-conversation describing a problem they hit - that prose is the journal content and lives in the main session. Capture it inline.
+- Quick single-line `## Journal` appends - agent overhead isn't worth it.
 
 **How to delegate:**
 
@@ -47,3 +47,5 @@ Spawn the agent in a single Agent tool call:
 - `prompt`: pass through `mode` (`new` | `update`), `phase` (e.g. `1.5`), and any `scope_hint` (goal text, section to update, paragraph the user dictated).
 
 When the agent returns its short confirmation, relay it to the user verbatim.
+
+> **Bridge:** when `sb` is installed, run `/sb:sync-project` after writing the entry so it lands in the vault. See `bridge/ROUTER.md`.

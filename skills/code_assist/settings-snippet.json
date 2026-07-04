@@ -1,0 +1,20 @@
+{
+  "_comment": "Merge these into ~/.claude/settings.json under 'hooks'. install.sh does this idempotently with jq. Hooks live under the symlinked skill dir; both honor CA_DISABLE=1, git-guard hard-blocks only under CA_GIT_GUARD_STRICT=1.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/skills/code_assist/hooks/ca-session-start.js\"", "timeout": 5 }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node \"$HOME/.claude/skills/code_assist/hooks/ca-git-guard.js\"", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}

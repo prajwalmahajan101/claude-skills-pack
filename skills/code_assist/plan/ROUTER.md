@@ -35,3 +35,5 @@ tasks: run inline. Never let the agent begin execution - approval stays with the
 ## Handoff
 After execution: `verify` (Iron Law #3) → `commit` → `journal`. See
 `_shared/discipline.md` family-chaining.
+
+> **Bridge:** `plan execute` honors `unabridged` (no truncation) when installed; a resolved plan can emit an `/sb:lesson`. See `bridge/ROUTER.md`.

@@ -1,0 +1,9 @@
+{
+  "name": "unabridged",
+  "description": "Force complete, unabridged output — no truncation, no placeholders, no \"for brevity\". Triggers on phrases like \"full file\", \"complete implementation\", \"no placeholders\", \"whole thing\", \"write it all out\", \"no skeleton\".",
+  "version": "1.0.0",
+  "author": { "name": "Prajwal Mahajan" },
+  "keywords": [
+    "output", "completeness", "no-truncation", "no-placeholders", "full-file", "unabridged"
+  ]
+}
