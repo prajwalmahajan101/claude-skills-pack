@@ -19,7 +19,7 @@ const { fm, parseFrontmatter } = require("./markdown.js");
 const { preambleBlock } = require("./ai-first.js");
 
 // Default memory dir: mirrors how Claude Code sanitizes the home path
-// (/home/prjawal -> -home-prjawal). Override with SB_MEMORY_DIR.
+// (e.g. /home/<user> -> -home-<user>). Override with SB_MEMORY_DIR.
 function memoryDir() {
   if (process.env.SB_MEMORY_DIR) return expand(process.env.SB_MEMORY_DIR);
   const home = os.homedir();
