@@ -22,7 +22,11 @@ try {
   const path = require("node:path");
   const { spawnSync } = require("node:child_process");
 
-  const SKILL_LIB = path.join(__dirname, "..", "lib");
+  // In-repo sibling (tests) or the installed skill dir (~/.claude/hooks → ../lib is
+  // wrong; fall back to the installed skill's lib).
+  const SKILL_LIB = fs.existsSync(path.join(__dirname, "..", "lib", "vault.js"))
+    ? path.join(__dirname, "..", "lib")
+    : path.join(os.homedir(), ".claude", "skills", "sb", "lib");
   const { readSessionMap, updateSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
   // Mark a session mined under the session-map lock, merging onto the latest entry so
   // a concurrent capture write (byteOffset/turnCount) to the same key isn't clobbered.
