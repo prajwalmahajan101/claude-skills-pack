@@ -24,4 +24,4 @@ draft the ADR as part of the plan.
 `docs/adr/NNNN-<slug>.md`, zero-padded, incrementing from the highest existing number.
 `docs/adr/0000-template.md` is the template (created by `structure scaffold` if missing).
 
-> **Bridge:** when `sb` is installed, run `/sb:sync-project` after recording an ADR so the decision syncs to the vault. See `bridge/ROUTER.md`.
+> **Note:** the ADR is written under `docs/adr/` (git-tracked).

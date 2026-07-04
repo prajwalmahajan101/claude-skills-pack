@@ -24,7 +24,7 @@
  *   changelog [--since <tag>]     group commits since last tag (release backing)
  *   version-detect [dir]          find the version source + current value
  *   onboard-scan [dir]            stack + structure + entry-point orientation blob
- *   selfcheck                     which tools/integrations/siblings are configured
+ *   selfcheck                     which tools/integrations are configured
  *   recall --context "<text>"     pull relevant prior lessons/memory/risks (provenance)
  *   secret-scan --staged|<paths>  detect committed secrets (masked; never prints values)
  *   deps-audit [dir]              read-only vuln audit (npm/pip/cargo/go)
@@ -32,7 +32,6 @@
  *   install-git-hooks [dir] [--apply]     write .githooks + core.hooksPath (dry-run default)
  *   uninstall-git-hooks [dir] [--apply]   revert core.hooksPath
  *   incident-scaffold --title T [--apply] next-numbered docs/incidents/NNNN-*.md (+ base tag)
- *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
  *   notify <slack|telegram> --text … [--confirm]    webhook post (dry-run default)
@@ -402,17 +401,13 @@ function selfcheck() {
       telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID),
       sonar: !!(env.SONAR_HOST_URL && env.SONAR_TOKEN),
     },
-    siblings: {
-      sb: fs.existsSync(path.join(os.homedir(), ".claude", "skills", "sb")),
-      unabridged: fs.existsSync(path.join(os.homedir(), ".claude", "skills", "unabridged")),
-    },
   };
 }
 
 // ---------------------------------------------------------------------------
-// recall — reverse bridge: pull relevant prior lessons / memory / risks so the
-// LLM reasons WITH accumulated knowledge. Self-contained (reads the three raw
-// stores directly); enriches with sb's semantic retriever when sb is present.
+// recall — pull relevant prior lessons / memory / risks so the LLM reasons WITH
+// accumulated knowledge. Self-contained: reads the three harness stores directly
+// (global lessons, the project's MEMORY.md, ~/.remember).
 // Every item carries a file:line `ref` (provenance) — nothing is invented.
 // ---------------------------------------------------------------------------
 const RISK_TAGS = /\b(risk|gotcha|pitfall|footgun|regression|caution|danger|breaking|security|antipattern|anti-pattern)\b/i;
@@ -496,23 +491,6 @@ function readRemember() {
   return out;
 }
 
-// Best-effort sb enrichment: verbatim highlights with provenance. Never throws.
-function sbHighlights(context, limit) {
-  const runner = path.join(os.homedir(), ".claude", "skills", "sb", "commands", "_runners", "ask-highlights.js");
-  if (!fs.existsSync(runner)) return [];
-  const r = sh("node", [runner, context, "--limit", String(limit)], { timeout: 8000 });
-  if (r.status !== 0 || !r.stdout) return [];
-  const out = [];
-  const lines = r.stdout.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const t = lines[i].match(/^•\s*(.+)$/);
-    if (!t) continue;
-    const ref = (lines[i + 1] || "").match(/—\s*(.+:\d+)\s*$/);
-    out.push({ text: t[1].trim(), tag: "", source: "sb", ref: ref ? ref[1] : "sb:vault" });
-  }
-  return out;
-}
-
 function isRisk(item) { return RISK_TAGS.test(item.tag) || RISK_TAGS.test(item.text) || RISK_PHRASE.test(item.text); }
 
 function recall(args) {
@@ -531,14 +509,8 @@ function recall(args) {
   const memoryItems = readMemory(dir);
   const rememberItems = readRemember();
 
-  let lessons = rank(lessonItems, "lessons");
+  const lessons = rank(lessonItems, "lessons");
   const memory = rank(memoryItems.concat(rememberItems.map((r) => ({ ...r, source: "remember" }))), "memory");
-  // sb enrichment (verbatim, provenance) — merged into lessons, deduped by text.
-  // CA_RECALL_SB=0 disables it (keeps tier-1 fully isolated for deterministic tests).
-  if (context && process.env.CA_RECALL_SB !== "0" && selfcheck().siblings.sb) {
-    const seen = new Set(lessons.map((l) => l.text));
-    for (const h of sbHighlights(context, limit)) if (!seen.has(h.text)) { lessons.push({ ...h, score: 1 }); seen.add(h.text); }
-  }
   // risks = risk-flagged items from CURATED sources (lessons + memory), never the
   // noisy remember activity log; deduped, ranked.
   const riskPool = lessons.concat(memory).filter((it) => it.source !== "remember" && isRisk(it));
@@ -546,8 +518,7 @@ function recall(args) {
 
   const clip = (arr) => arr.slice(0, limit).map(({ text, tag, source, ref }) => ({ text, tag: tag || undefined, source, ref }));
   const result = { context, dir: path.resolve(dir), sources: {
-    lessons: lessonItems.length, memory: memoryItems.length, remember: rememberItems.length,
-    sb: selfcheck().siblings.sb } };
+    lessons: lessonItems.length, memory: memoryItems.length, remember: rememberItems.length } };
   if (kinds.includes("lessons")) result.lessons = clip(lessons);
   if (kinds.includes("risks")) result.risks = clip(risks);
   if (kinds.includes("memory")) result.memory = clip(memory);
@@ -775,33 +746,6 @@ function incidentScaffold(args) {
 }
 function githookSafeTemplate(name) {
   return fs.readFileSync(path.join(__dirname, "..", "structure", "templates", name), "utf8");
-}
-
-// ---------------------------------------------------------------------------
-// bridge — detect sibling skills + describe handoffs (now bidirectional)
-// ---------------------------------------------------------------------------
-function bridge(args) {
-  const f = flags(args);
-  const sub = f._[0] || "status";
-  const sc = selfcheck();
-  if (sub === "status") {
-    const r = recall(["--limit", "0", "--kinds", "lessons"]);
-    return {
-      siblings: sc.siblings,
-      handoffs: {
-        sb: sc.siblings.sb ? "journal/adr/review/decision artifacts -> /sb:sync-project ingests into the vault"
-          : "sb not installed (optional)",
-        unabridged: sc.siblings.unabridged ? "full-output families (plan execute, onboard, scaffold) honor the no-truncation rule"
-          : "unabridged not installed (optional)",
-      },
-      pull: {
-        available: (r.sources.lessons + r.sources.memory + r.sources.remember) > 0 || sc.siblings.sb,
-        sources: r.sources,
-        note: "reverse channel: `ca-tools recall --context \"<task>\"` surfaces lessons/memory/risks with provenance",
-      },
-    };
-  }
-  return { ok: false, reason: "usage: bridge <status>" };
 }
 
 // ---------------------------------------------------------------------------
@@ -1054,7 +998,6 @@ async function main() {
     case "notify": return out(await notify(rest));
     case "scan": return out(await scan(rest));
     case "graph": return out(graph(rest));
-    case "bridge": return out(bridge(rest));
     case undefined: return die("no command. see header for usage.", 2);
     default: return die("unknown command: " + cmd, 2);
   }
@@ -1067,7 +1010,7 @@ if (require.main === module) {
   module.exports = {
     detectStack, classifyFile, structureAudit, structureScaffold,
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
-    track, notify, bridge, flags, recall, secretScan, depsAudit, envCheck,
+    track, notify, flags, recall, secretScan, depsAudit, envCheck,
     installGitHooks, uninstallGitHooks, incidentScaffold,
   };
 }

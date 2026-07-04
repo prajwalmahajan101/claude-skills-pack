@@ -124,7 +124,7 @@ test("versionDetect reads package.json", () => {
 
 test("selfcheck reports structured booleans, never throws", () => {
   const s = ca.selfcheck();
-  assert.ok(s.tools && s.integrations && s.siblings);
+  assert.ok(s.tools && s.integrations);
   assert.equal(typeof s.integrations.jira, "boolean");
 });
 
@@ -135,7 +135,7 @@ test("CLI dispatch emits valid JSON for version", () => {
   assert.equal(j.name, "ca-tools");
 });
 
-// --- reverse bridge (recall) -------------------------------------------------
+// --- recall (harness stores) -------------------------------------------------
 function seedStores() {
   const d = tmp();
   fs.mkdirSync(path.join(d, "lessons"));
@@ -150,20 +150,18 @@ function seedStores() {
   return d;
 }
 function withStores(d, fn) {
-  const saved = { l: process.env.CA_LESSONS_DIR, m: process.env.CA_MEMORY_DIR, r: process.env.CA_REMEMBER_DIR, s: process.env.CA_RECALL_SB };
+  const saved = { l: process.env.CA_LESSONS_DIR, m: process.env.CA_MEMORY_DIR, r: process.env.CA_REMEMBER_DIR };
   process.env.CA_LESSONS_DIR = path.join(d, "lessons");
   process.env.CA_MEMORY_DIR = path.join(d, "mem");
   process.env.CA_REMEMBER_DIR = path.join(d, "remember");
-  process.env.CA_RECALL_SB = "0"; // deterministic: skip sb enrichment
   try { return fn(); } finally {
     saved.l === undefined ? delete process.env.CA_LESSONS_DIR : process.env.CA_LESSONS_DIR = saved.l;
     saved.m === undefined ? delete process.env.CA_MEMORY_DIR : process.env.CA_MEMORY_DIR = saved.m;
     saved.r === undefined ? delete process.env.CA_REMEMBER_DIR : process.env.CA_REMEMBER_DIR = saved.r;
-    saved.s === undefined ? delete process.env.CA_RECALL_SB : process.env.CA_RECALL_SB = saved.s;
   }
 }
 
-test("recall surfaces relevant lessons + risks with provenance (tier-1, sb off)", () => {
+test("recall surfaces relevant lessons + risks with provenance (harness stores)", () => {
   const d = seedStores();
   withStores(d, () => {
     const r = ca.recall(["--context", "committing secrets to git", "--limit", "5"]);
@@ -191,15 +189,6 @@ test("recall is bounded by --limit", () => {
   withStores(d, () => {
     const r = ca.recall(["--context", "commit git secrets database pytest", "--limit", "1"]);
     assert.ok(r.lessons.length <= 1, "respects --limit");
-  });
-});
-
-test("bridge status exposes the pull (reverse) channel", () => {
-  const d = seedStores();
-  withStores(d, () => {
-    const b = ca.bridge(["status"]);
-    assert.ok(b.pull && b.pull.available === true, "pull channel advertised");
-    assert.equal(b.pull.sources.lessons, 2);
   });
 });
 

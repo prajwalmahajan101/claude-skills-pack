@@ -101,4 +101,4 @@ _Last reviewed: YYYY-MM-DD_
 
 Single-stack repos keep the flat `.code_review/*.md` layout (no nesting) for backwards compatibility.
 
-> **Bridge:** when `sb` is installed, run `/sb:sync-project` after a review so its `.code_review/` state syncs to the vault. See `bridge/ROUTER.md`.
+> **Note:** review state persists under `.code_review/` - recommend committing it so it survives across contributors.

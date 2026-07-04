@@ -48,4 +48,4 @@ Spawn the agent in a single Agent tool call:
 
 When the agent returns its short confirmation, relay it to the user verbatim.
 
-> **Bridge:** when `sb` is installed, run `/sb:sync-project` after writing the entry so it lands in the vault. See `bridge/ROUTER.md`.
+> **Note:** the entry is written under `.journal/` (git-tracked).

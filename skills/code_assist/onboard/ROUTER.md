@@ -29,4 +29,4 @@ Goal: make an unfamiliar (or under-documented) repo legible - produce `CLAUDE.md
 - Never overwrite an existing CLAUDE.md/README without asking; prefer augmenting.
 - Chains from `structure scaffold` (seed the stubs, then fill them here).
 
-> **Bridge:** the generated `CLAUDE.md` honors `unabridged` (complete, not a skeleton) when it is installed. See `bridge/ROUTER.md`.
+> **Note:** the generated `CLAUDE.md` is complete, not a skeleton.

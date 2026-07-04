@@ -6,5 +6,5 @@ description: Write a blameless postmortem into docs/incidents/ and capture preve
 # /code_assist:incident_postmortem
 
 Read `~/.claude/skills/code_assist/incident/postmortem.md` and follow it - impact, timeline, proven
-root cause, resolution, owned action items, and an `/sb:lesson` tagged `risk` so the reverse bridge
-surfaces it next time.
+root cause, resolution, owned action items, and a lesson tagged `risk` so `recall` surfaces it next
+time.

@@ -3,7 +3,7 @@
 // ca-session-start — SessionStart hook. Prints a one-block orientation for the repo:
 // the .code_assist/STATE.md "Now" line (only when STATE.md exists), the structure compliance
 // score (always, inside a repo), and up to 2 repo-scoped **risks** pulled from harness memory
-// via the reverse bridge (`ca-tools recall`). Silent OUTSIDE a git repo, and silent if it has
+// via `ca-tools recall`. Silent OUTSIDE a git repo, and silent if it has
 // literally nothing to show, so it never adds noise to non-repo dirs.
 //
 // Gated by CA_DISABLE=1. Never blocks the session; any error exits 0 quietly.
@@ -38,7 +38,7 @@ function main() {
       (errs ? " (`/code_assist:structure` to audit)" : ""));
   }
 
-  // 3. Top repo-scoped risks from memory (reverse bridge). Fast: no sb enrichment.
+  // 3. Top repo-scoped risks from harness memory (via `ca-tools recall`).
   for (const r of topRisks(cwd)) lines.push(`**Risk:** ${r.text} \`${r.ref.split("/").pop()}\``);
 
   if (!lines.length) process.exit(0);
@@ -71,16 +71,12 @@ function readStateNow(cwd) {
 
 function topRisks(cwd) {
   // Repo-scoped risks only (memory source), keyword-biased by repo name + branch.
-  // sb enrichment disabled so we never exceed the hook timeout.
   try {
-    const prev = process.env.CA_RECALL_SB;
-    process.env.CA_RECALL_SB = "0";
     const tools = require(path.join(__dirname, "..", "bin", "ca-tools.js"));
     if (!tools || typeof tools.recall !== "function") return [];
     // No --context: a risk in THIS project's own memory is inherently relevant, so surface it
     // unconditionally (repo-scoped). Global lessons are excluded below (would be noise).
     const r = tools.recall(["--kinds", "risks", "--limit", "8", "--dir", cwd]);
-    prev === undefined ? delete process.env.CA_RECALL_SB : process.env.CA_RECALL_SB = prev;
     return (r.risks || []).filter((x) => x.source === "memory").slice(0, 2)
       .map((x) => ({ text: x.text.slice(0, 120), ref: x.ref }));
   } catch { return []; }

@@ -1,6 +1,6 @@
 ---
 name: code_assist/incident/postmortem
-description: Write a blameless postmortem into docs/incidents/NNNN-*.md - impact, timeline, proven root cause, resolution, and preventive action items that feed the reverse bridge as risks.
+description: Write a blameless postmortem into docs/incidents/NNNN-*.md - impact, timeline, proven root cause, resolution, and preventive action items recorded as risks that `recall` surfaces later.
 type: skill
 ---
 
@@ -19,9 +19,9 @@ that allowed the failure, never a person.
 5. **Resolution** - what stopped the bleeding and the fresh evidence that verified it.
 6. **Action items** - preventive work so this *class* of failure can't recur (detection, guardrail,
    test, rollback path). Assign owners. Mark the durable ones for the next step.
-7. **Capture the lesson (closed loop):** emit an `/sb:lesson "<title>"` tagged **risk** for the
-   durable takeaways. The reverse bridge (`recall`) then surfaces it in future plan/debug/review
-   and at session start - so the pack learns from the outage. If sb is present, `/sb:sync-project`.
+7. **Capture the lesson (closed loop):** record the durable takeaways as a lesson tagged **risk**.
+   `recall` then surfaces it in future plan/debug/review and at session start - so future work
+   learns from the outage.
 
 ## Rules
 - Blameless. "The deploy step had no smoke test" - not "X forgot to test".
