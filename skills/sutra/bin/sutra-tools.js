@@ -142,6 +142,109 @@ function memberFor(capability) {
 }
 
 // ---------------------------------------------------------------------------
+// schema-check — conformance of member artifact output vs schema/*.spec.md.
+// Sutra OWNS the interchange schema; code_assist writes its own format
+// standalone, so this catches drift here rather than coupling the producer.
+// Deterministic, read-only. See schema/{journal,adr,review}.spec.md.
+// ---------------------------------------------------------------------------
+function repoRoot(dir) {
+  const r = sh("git", ["-C", dir || ".", "rev-parse", "--show-toplevel"]);
+  return r.status === 0 && r.stdout ? r.stdout : path.resolve(dir || ".");
+}
+
+const JOURNAL_FILE = /^M[0-9]+(\.[0-9]+)*\.md$/;
+const ADR_FILE = /^[0-9]{4}-[a-z0-9]+(-[a-z0-9]+)*\.md$/;
+const ISSUE_HEAD = /^###\s+ISSUE-[0-9]+\s+[—-]\s+.+/;
+const ISSUE_SEV = /Severity:\s*(Critical|High|Medium|Low)\b/i;
+const ISSUE_PRI = /Priority:\s*(P[0-3])\b/i;
+
+function checkJournals(root) {
+  const dir = path.join(root, ".journal");
+  const res = { found: 0, conforming: 0, violations: [], warnings: [] };
+  if (!fs.existsSync(dir)) return res;
+  for (const f of fs.readdirSync(dir)) {
+    if (f === "TEMPLATE.md" || !f.endsWith(".md")) continue;
+    if (!JOURNAL_FILE.test(f)) { res.violations.push(`${f}: filename does not match M<phase>.md`); continue; }
+    res.found++;
+    const body = fs.readFileSync(path.join(dir, f), "utf8");
+    const firstH1 = (body.split("\n").find((l) => l.trim().startsWith("# ")) || "").trim();
+    if (!/^#\s+M[0-9]+(\.[0-9]+)*\b/.test(firstH1)) { res.violations.push(`${f}: missing '# M<phase>' H1 header`); continue; }
+    if (!body.replace(firstH1, "").trim()) { res.violations.push(`${f}: no body content`); continue; }
+    res.conforming++;
+  }
+  return res;
+}
+
+function checkAdrs(root) {
+  const dir = path.join(root, "docs", "adr");
+  const res = { found: 0, conforming: 0, violations: [], warnings: [] };
+  if (!fs.existsSync(dir)) return res;
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".md") || f === "0000-template.md" || f === "INDEX.md" || f === "index.md") continue;
+    if (!ADR_FILE.test(f)) { res.warnings.push(`${f}: filename not NNNN-slug.md (skipped)`); continue; }
+    res.found++;
+    const num = f.slice(0, 4);
+    const body = fs.readFileSync(path.join(dir, f), "utf8");
+    const problems = [];
+    // Accept both canonical `# NNNN. title` and the common `# ADR NNNN: title`
+    // variant; require only that the filename number appears in the H1.
+    const h1 = (body.split("\n").find((l) => l.startsWith("# ")) || "").trim();
+    if (!new RegExp(`^#\\s+(ADR\\s+)?0*${Number(num)}\\b`, "i").test(h1)) problems.push("H1 number mismatches filename");
+    // Status/Date lines may use bold labels (`- **Status:**`) and either casing.
+    if (!/^-\s*\*{0,2}Status:?\*{0,2}\s*(proposed|accepted|superseded)\b/im.test(body)) problems.push("missing/invalid Status line");
+    if (!/\*{0,2}Date:?\*{0,2}\s*\d{4}-\d{2}-\d{2}\b/im.test(body)) problems.push("missing/invalid Date line");
+    for (const sec of ["Context", "Decision", "Consequences", "Usage"]) {
+      if (!new RegExp(`^##\\s+${sec}\\b`, "im").test(body)) problems.push(`missing ## ${sec}`);
+    }
+    if (problems.length) res.violations.push(`${f}: ${problems.join("; ")}`);
+    else res.conforming++;
+  }
+  return res;
+}
+
+function checkReviews(root) {
+  const base = path.join(root, ".code_review");
+  const res = { found: 0, conforming: 0, violations: [], warnings: [] };
+  if (!fs.existsSync(base)) return res;
+  // Collect every code_review_issues.md (flat + per-stack).
+  const issueFiles = [];
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name === "code_review_issues.md") issueFiles.push(p);
+    }
+  })(base);
+  for (const p of issueFiles) {
+    res.found++;
+    const rel = path.relative(root, p);
+    const body = fs.readFileSync(p, "utf8");
+    const active = body.split(/^##\s+Resolved\b/im)[0]; // stop at Resolved section
+    const lines = active.split("\n");
+    let issueProblems = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (!ISSUE_HEAD.test(lines[i])) continue;
+      const block = lines.slice(i + 1, i + 8).join("\n");
+      if (!ISSUE_SEV.test(block) || !ISSUE_PRI.test(block)) {
+        res.violations.push(`${rel}: ${lines[i].trim().slice(0, 60)} — missing valid Severity/Priority`);
+        issueProblems++;
+      }
+    }
+    if (!issueProblems) res.conforming++;
+  }
+  return res;
+}
+
+function schemaCheck(dir) {
+  const root = repoRoot(dir);
+  const journal = checkJournals(root);
+  const adr = checkAdrs(root);
+  const review = checkReviews(root);
+  const ok = !journal.violations.length && !adr.violations.length && !review.violations.length;
+  return { dir: root, ok, journal, adr, review };
+}
+
+// ---------------------------------------------------------------------------
 // selfcheck — registry + orchestrator config in one shot
 // ---------------------------------------------------------------------------
 function selfcheck() {
@@ -170,6 +273,11 @@ async function main() {
     case "version": return out({ name: "sutra-tools", version: VERSION });
     case "registry": return out(registry());
     case "selfcheck": return out(selfcheck());
+    case "schema-check": {
+      const res = schemaCheck(flags(rest)._[0] || ".");
+      if (flags(rest)["exit-code"]) process.exit(res.ok ? 0 : 1);
+      return out(res);
+    }
     case undefined: return die("no command. see header for usage.", 2);
     default: return die("unknown command: " + cmd, 2);
   }
@@ -181,5 +289,6 @@ if (require.main === module) {
   module.exports = {
     flags, safeJSON, resolveMember, memberVersion, loadMembers,
     registry, memberFor, selfcheck, VERSION, SKILL_ROOT, PACK_ROOT,
+    repoRoot, checkJournals, checkAdrs, checkReviews, schemaCheck,
   };
 }
