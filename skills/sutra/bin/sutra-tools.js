@@ -295,6 +295,7 @@ function recallFused(args) {
   const dir = f.dir || ".";
   const timeout = Number(f.timeout || 8000);
   const sources = { code_assist: false, sb: false };
+  const warnings = [];
   let lessons = [], risks = [], memory = [];
 
   // Base: code_assist's own recall (its files are the source of truth). Pull a
@@ -303,28 +304,35 @@ function recallFused(args) {
   if (caCli) {
     sources.code_assist = true;
     const r = sh("node", [caCli, "recall", "--context", context, "--limit", String(limit * 2), "--dir", dir], { timeout });
-    if (r.status === 0 && r.stdout) {
+    if (r.error || r.status !== 0) {
+      warnings.push(`code_assist recall failed: ${spawnWhy(r)}`);
+    } else if (r.stdout) {
       try {
         const base = JSON.parse(r.stdout);
         lessons = (base.lessons || []).map((x, i) => ({ ...x, source: x.source || "code_assist", _rank: i }));
         risks = base.risks || [];
         memory = base.memory || [];
-      } catch {}
+      } catch { warnings.push("code_assist recall returned unparseable JSON"); }
     }
   }
 
-  // Layer: sb's vault highlights (verbatim, with provenance).
+  // Layer: sb's vault highlights (verbatim, with provenance). Rank sb hits AFTER
+  // the base lessons so the score→rank tie-break orders cross-source items
+  // deterministically (an sb hit no longer collides with a base hit at the same i).
+  const baseCount = lessons.length;
   const sbCli = memberPath("sb", "commands", "_runners", "ask-highlights.js");
   if (sbCli && context) {
     sources.sb = true;
     const r = sh("node", [sbCli, context, "--limit", String(limit)], { timeout });
-    if (r.status === 0 && r.stdout) {
+    if (r.error || r.status !== 0) {
+      warnings.push(`sb highlights failed: ${spawnWhy(r)}`);
+    } else if (r.stdout) {
       const lines = r.stdout.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const t = lines[i].match(/^•\s*(.+)$/);
         if (!t) continue;
         const ref = (lines[i + 1] || "").match(/—\s*(.+:\d+)\s*$/);
-        lessons.push({ text: t[1].trim(), source: "sb", ref: ref ? ref[1] : "sb:vault", _rank: i });
+        lessons.push({ text: t[1].trim(), source: "sb", ref: ref ? ref[1] : "sb:vault", _rank: baseCount + i });
       }
     }
   }
@@ -345,7 +353,13 @@ function recallFused(args) {
 
   const strip = (arr) => arr.map(({ _score, _rank, ...rest }) => rest);
   const clip = (a) => a.slice(0, limit);
-  return { context, sources, lessons: clip(strip(merged)), risks: clip(risks), memory: clip(memory) };
+  return { context, sources, warnings, lessons: clip(strip(merged)), risks: clip(risks), memory: clip(memory) };
+}
+
+// Human-readable reason a member subprocess failed (spawn error / timeout / exit).
+function spawnWhy(r) {
+  if (r.error) return r.status === null ? "timeout" : (r.error.code || "spawn-error");
+  return `exit ${r.status}`;
 }
 
 // bridge status — registry-based handoff availability (observable, no-op-safe).
