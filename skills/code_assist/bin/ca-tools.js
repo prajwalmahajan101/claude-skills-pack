@@ -593,12 +593,27 @@ function secretScan(args) {
     const r = sh("git", ["-C", dir, "diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
     files = r.stdout.split("\n").filter(Boolean);
     if (maxFiles > 0 && files.length > maxFiles) { truncated = files.length - maxFiles; files = files.slice(0, maxFiles); }
-    for (const file of files) { const c = stagedContent(dir, file, maxFiles > 0 ? 3000 : 0); if (c != null) scanText(c, file, findings, ignore); }
+    // Bounded mode also honors a cumulative wall-clock budget, so the guarantee that
+    // this can't blow the 5s hook budget rests on an internal cap, not on git speed.
+    const startedAt = Date.now();
+    let i = 0;
+    for (; i < files.length; i++) {
+      if (maxFiles > 0 && Date.now() - startedAt > 3000) break;
+      const c = stagedContent(dir, files[i], maxFiles > 0 ? 3000 : 0);
+      if (c != null) scanText(c, files[i], findings, ignore);
+    }
+    if (i < files.length) { truncated += files.length - i; files = files.slice(0, i); } // time-capped
   } else if (f.range) {
     mode = "range:" + f.range;
     const r = sh("git", ["-C", dir, "diff", "--name-only", "--diff-filter=ACM", String(f.range)]);
     files = r.stdout.split("\n").filter(Boolean);
-    for (const file of files) { try { scanText(fs.readFileSync(path.join(dir, file), "utf8"), file, findings, ignore); } catch {} }
+    // Scan each file's content AT the range's end ref (not the working tree), so a
+    // secret present in the range but since edited/removed is still detected.
+    const endRef = String(f.range).split(/\.{2,3}/).pop() || "HEAD";
+    for (const file of files) {
+      const c = sh("git", ["-C", dir, "show", `${endRef}:${file}`]);
+      if (c.status === 0) scanText(c.stdout, file, findings, ignore);
+    }
   } else {
     mode = "paths";
     files = f._.length ? f._ : [];
@@ -839,7 +854,9 @@ function track(args) {
   const base = process.env.JIRA_BASE_URL, email = process.env.JIRA_EMAIL, token = process.env.JIRA_TOKEN;
   const configured = base && email && token;
   const auth = configured ? "Basic " + Buffer.from(`${email}:${token}`).toString("base64") : null;
-  const key = f._[1];
+  // URL-encode the key before it goes into a REST path (a key like FOO/../x must not
+  // path-traverse the Jira API).
+  const key = f._[1] != null ? encodeURIComponent(String(f._[1])) : f._[1];
 
   if (!configured && sub !== "help") {
     return { ok: false, configured: false, hint: "set JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN to enable Jira; commands no-op until then." };
