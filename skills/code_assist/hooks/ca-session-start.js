@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 "use strict";
 // ca-session-start — SessionStart hook. Prints a one-block orientation for the repo:
-// the .code_assist/STATE.md "Now" line + the structure compliance score. Silent when
-// there is no git repo or no state to show, so it never adds noise to fresh dirs.
+// the .code_assist/STATE.md "Now" line (only when STATE.md exists) + the structure
+// compliance score (always, inside a repo). Silent OUTSIDE a git repo, and silent if it
+// has literally nothing to show (e.g. an audit that returned no score), so it never adds
+// noise to non-repo dirs.
 //
 // Gated by CA_DISABLE=1. Never blocks the session; any error exits 0 quietly.
 

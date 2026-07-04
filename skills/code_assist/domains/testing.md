@@ -24,6 +24,23 @@ type: skill
 - Fast feedback: unit suite in seconds. Quarantine + fix flaky tests, don't ignore them.
 - Coverage is a signal, not a target - cover behavior and edge cases, not lines for their own sake.
 
+## Anti-patterns (reject in review)
+- **Testing the mock:** asserting a mock was called with args you also hard-coded - proves nothing
+  about behavior. Fix: assert the observable outcome (returned value, persisted row, emitted event).
+- **Change-detector test:** asserts internal call order / private state, breaks on every refactor.
+  Fix: test the public contract; if it can't be observed from outside, question whether to test it.
+- **Non-deterministic test:** depends on wall-clock, network, random, or test order. Fix: inject a
+  clock, stub the boundary, seed randomness, isolate state. A flaky test is a failing test.
+- **Assertion-free / happy-path-only:** exercises code but asserts nothing, or never covers the
+  error/edge branch. Fix: assert the result AND at least one failure mode per unit.
+- **Coverage-chasing:** tests written to hit a % on trivial getters. Fix: cover behavior and edges;
+  coverage is a signal, not the target.
+
+## Worked example - a real regression test (bug-first)
+A bug: `parseAmount("1,000")` returns `1`. The fix is not "wrap in try/catch". First write
+`assert parseAmount("1,000") == 1000` - watch it FAIL on the current code (proves it reproduces the
+bug), then fix the parser at the root, then watch it pass. The test now guards the behavior forever.
+
 ## Deeper references (optional)
 `pr-test-analyzer` (agent), the `testing-handbook-skills:*` set (aflpp, libfuzzer, cargo-fuzz,
 atheris, harness-writing, coverage-analysis, address-sanitizer), `constant-time-testing`.
