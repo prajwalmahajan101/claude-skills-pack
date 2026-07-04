@@ -224,8 +224,13 @@ function checkReviews(root) {
     let issueProblems = 0;
     for (let i = 0; i < lines.length; i++) {
       if (!ISSUE_HEAD.test(lines[i])) continue;
-      const block = lines.slice(i + 1, i + 8).join("\n");
-      if (!ISSUE_SEV.test(block) || !ISSUE_PRI.test(block)) {
+      // Scan this issue's block — from its header until the next markdown heading
+      // (the next issue is itself a `###` heading) — rather than a fixed 7-line
+      // window, so metadata further down the block is still found.
+      const block = [];
+      for (let j = i + 1; j < lines.length && !/^#{1,6}\s/.test(lines[j]); j++) block.push(lines[j]);
+      const text = block.join("\n");
+      if (!ISSUE_SEV.test(text) || !ISSUE_PRI.test(text)) {
         res.violations.push(`${rel}: ${lines[i].trim().slice(0, 60)} — missing valid Severity/Priority`);
         issueProblems++;
       }
