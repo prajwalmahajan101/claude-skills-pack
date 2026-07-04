@@ -1,7 +1,7 @@
 {
   "name": "code_assist",
   "description": "Self-contained developer-workflow powerhouse: atomic commits, architectural code review, phase journals, plan/debug/verify/ADR discipline, structure audit + scaffold, release/onboard/refactor, and github/jira/slack/sonar/graph integrations. Backed by a zero-dep Node CLI, deterministic self-tests, dedicated subagents, and session/git-guard hooks.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": { "name": "Prajwal Mahajan" },
   "keywords": [
     "git", "commit", "code-review", "journal", "plan", "debug", "verify", "adr",

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-04
+
+Introduces **sutra**, the orchestrator, and makes the three original members fully standalone
+(Single-Responsibility). See [ADR 0002](docs/adr/0002-sutra-orchestrator-and-plugin-independence.md).
+Component versions at this release: code_assist 0.7.0, sb 0.10.0, unabridged 1.0.0, sutra 0.1.0.
+
+### Added
+
+- **sutra** — the optional 4th plugin, the composition root that makes the pack cooperate:
+  - **Capability registry** (`registry/members.json` + `sutra-tools registry`) — inverts sibling
+    detection so members never name each other; a missing member no-ops its bridge.
+  - **Interchange schema** (`schema/{journal,adr,review}.spec.md` + `schema-check`) — sutra owns the
+    canonical artifact shapes with a conformance check, so code_assist stays ignorant of it yet drift
+    is caught.
+  - **Bridges** — `sync-artifacts` (parse repo artifacts → sb vault payload) and fused `recall`
+    (code_assist base + sb vault, deduped, provenance-cited; never fabricates).
+  - **Feedback loop** — `loop-emit` records verify/plan/incident outcomes; `bridge/ROUTER.md` +
+    `loop/ROUTER.md` document the closed loop.
+  - **Unified surface** — a general `sutra-agent` + `/sutra:do` catch-all, plus Tier-1 composed
+    commands (`review`, `commit`, `verify`, `recall`, `sync`, `capture`). Canonical, not exclusive.
+  - Zero-dep CLI + 17 self-tests + a SessionStart hook (roster + fused-recall risks).
+- **code_assist** — `graph review-prep`: a deterministic blast-radius table (changed symbols →
+  impactedCount, risk) that grounds review severity in the call graph, wired into the review router +
+  architectural-reviewer agent (degrades cleanly without GitNexus).
+
+### Changed
+
+- **code_assist is now fully standalone** — removed the `bridge/` family, sibling detection, the
+  sb-fusion in `recall`, and all cross-plugin handoff prose. `recall` keeps only the three harness
+  stores. The placeholder check is self-contained (no unabridged dependency).
+- **sb is now fully standalone** — removed `lib/repo-artifacts.js`; the repo-mirroring `sync-project`
+  command becomes a generic, producer-agnostic `ingest` primitive that sutra feeds. `repoRoot` moved
+  to `lib/git.js`.
+
 ## [0.6.0] - 2026-07-04
 
 First tagged release of the pack. Bundles three self-contained, standalone-installable
@@ -65,5 +99,6 @@ sb 0.9.1, unabridged 1.0.0.
   - imported notes are auto-tagged and registered as `[[backlinks]]` under their
     project `INDEX.md`, with a top-3 `## Related` section.
 
-[Unreleased]: https://github.com/prajwalmahajan101/claude-skills-pack/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/prajwalmahajan101/claude-skills-pack/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/prajwalmahajan101/claude-skills-pack/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/prajwalmahajan101/claude-skills-pack/releases/tag/v0.6.0

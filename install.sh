@@ -8,7 +8,7 @@
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILLS=("sb" "code_assist" "unabridged")
+SKILLS=("sb" "code_assist" "unabridged" "sutra")
 
 say()  { printf "\033[1;34m==>\033[0m %s\n" "$*"; }
 ok()   { printf "\033[1;32m ✓ \033[0m %s\n" "$*"; }
