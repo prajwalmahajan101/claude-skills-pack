@@ -2,9 +2,8 @@
 // List pending kanban tasks for current project (default) or all (--all).
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { projectSlugFromCwd, paths, VAULT, DIR } = require(path.join(SKILL_LIB, "vault.js"));
 const { parseBoard } = require(path.join(SKILL_LIB, "kanban.js"));
 

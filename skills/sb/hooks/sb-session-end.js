@@ -9,7 +9,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { spawnSync } = require("node:child_process");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "lib");
 const { readSessionMap, writeSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 
 try { main(); } catch (e) { logErr(e); }

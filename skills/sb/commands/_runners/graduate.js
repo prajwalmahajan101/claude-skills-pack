@@ -9,9 +9,8 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
 const { VAULT, DIR, paths, ensureDirs, slugify } = require(path.join(SKILL_LIB, "vault.js"));
 const { parseFrontmatter, fm } = require(path.join(SKILL_LIB, "markdown.js"));
 const { addTask } = require(path.join(SKILL_LIB, "kanban.js"));

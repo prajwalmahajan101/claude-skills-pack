@@ -7,7 +7,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = __dirname;
 const { tagFile } = require(path.join(SKILL_LIB, "tagger.js"));
 const { parseFrontmatter, fm } = require(path.join(SKILL_LIB, "markdown.js"));
 

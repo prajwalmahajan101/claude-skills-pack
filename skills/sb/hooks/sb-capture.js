@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 
-const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
+const SKILL_LIB = path.join(__dirname, "..", "lib");
 const { ensureDirs, projectSlugFromCwd, readSessionMap, updateSessionMap, paths, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 const { sessionFilePath, readEvents, toTurns } = require(path.join(SKILL_LIB, "jsonl.js"));
 const { fm, renderTurns, parseFrontmatter, writeConversation, updateFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
