@@ -39,8 +39,9 @@ if command -v jq >/dev/null 2>&1; then
   cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
 
   TMP_SNIPPET=$(mktemp)
-  HOME_ESC=$(printf '%s' "$HOME" | sed 's:[\/&]:\\&:g')
-  sed "s:\\\$HOME:$HOME_ESC:g" "$HERE/settings-snippet.json" > "$TMP_SNIPPET"
+  # Substitute the real CLAUDE_DIR (not $HOME) so a custom-dir install writes correct hook paths.
+  CLAUDE_DIR_ESC=$(printf '%s' "$CLAUDE_DIR" | sed 's:[\/&]:\\&:g')
+  sed "s:\\\$CLAUDE_DIR:$CLAUDE_DIR_ESC:g" "$HERE/settings-snippet.json" > "$TMP_SNIPPET"
 
   # A "code_assist entry" = one whose .hooks[] command matches ca-(session-start|git-guard).js
   jq --slurpfile snip "$TMP_SNIPPET" '

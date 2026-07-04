@@ -12,10 +12,12 @@
 //   1. deterministic token assertions (forbid / requireAny) — fast, free, no model in the loop.
 //   2. an LLM grader against grader.md — subjective adherence score (unless --no-grade).
 //
-// Requires the `claude` CLI on PATH. If it is missing this exits 0 (skip) unless
-// CA_EVAL_STRICT=1, so a plain `make all` on a machine without the CLI stays green.
+// Requires the `claude` CLI on PATH. eval-llm is opt-in (NOT part of `make all`, which is
+// lint+test+eval), so a missing CLI here is a setup failure: it exits NON-ZERO with a loud
+// banner by default, making CI gateable. Set CA_EVAL_ALLOW_MISSING=1 to downgrade an absent
+// CLI to a green skip (exit 0) for boxes that intentionally lack it.
 // Env: CA_EVAL_MODEL (default: let the CLI decide), CA_EVAL_TIMEOUT_MS (default 180000),
-//      CA_EVAL_THRESHOLD (grader pass score, default 7).
+//      CA_EVAL_THRESHOLD (grader pass score, default 7), CA_EVAL_ALLOW_MISSING (skip-green if no CLI).
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -46,11 +48,15 @@ function haveClaude() {
   return r.status === 0;
 }
 if (!haveClaude()) {
-  const msg = "eval-llm: `claude` CLI not found on PATH — skipping LLM evals.\n" +
-    "  Install Claude Code and re-run `make eval-llm` to exercise behavioral evals.";
-  if (process.env.CA_EVAL_STRICT === "1") { console.error(msg); process.exit(1); }
-  console.log(msg);
-  process.exit(0);
+  if (process.env.CA_EVAL_ALLOW_MISSING === "1") {
+    console.log("eval-llm: SKIPPED — `claude` CLI absent and CA_EVAL_ALLOW_MISSING=1 (exit 0).");
+    process.exit(0);
+  }
+  console.error("========================================================================");
+  console.error("eval-llm FAILED: `claude` CLI not found on PATH — 0 behavioral evals ran.");
+  console.error("  Install Claude Code, or set CA_EVAL_ALLOW_MISSING=1 to skip green in CI.");
+  console.error("========================================================================");
+  process.exit(1);
 }
 
 function claude(prompt, systemPrompt) {
