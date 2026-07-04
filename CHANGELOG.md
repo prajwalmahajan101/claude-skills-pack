@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-04
+
+First stable release. All four plugins are pinned to **1.0.0** (code_assist, sb, unabridged, sutra)
+and the marketplace mirror matches. This release closes every High-severity finding from the
+fresh-eyes audit (see `docs/KNOWN_ISSUES.md` for the remaining lower-severity items).
+
+### Fixed
+
+- **sutra — one issue tokenizer (H1).** `schema-check`'s `checkReviews` now validates off
+  `artifacts.parseIssues`, the single definition of "what is an issue" and its severity/priority, so
+  conformance and vault ingest can never disagree. An inline-form issues file is validated, not
+  silently passed unchecked.
+- **sutra — fence-aware parsing (H2).** `parseIssues`/`issueBlock` track fenced code, so a
+  `### ISSUE-999` inside a ``` ``` ```/`~~~` block no longer fabricates a phantom issue or a false
+  violation.
+- **sb — atomic, locked frontmatter writes (H3).** `updateFrontmatter` holds a per-file lock and
+  re-reads inside it (concurrent updates merge, not clobber), then writes via same-dir temp +
+  `renameSync`. Removes the lost-`plans`/`turn_count` and torn-write hazards from the three
+  auto-firing capture hooks.
+- **sb — plugin-manifest hooks (N1).** sb now ships `hooks/hooks.json` and a `hooks` key, so
+  `/plugin install sb@` wires its 7 capture hooks. Previously the plugin-install path captured
+  nothing while `/sb:*` commands still worked, hiding the failure.
+
+### Added
+
+- **sb — vault-repair test coverage (H4).** `skills/sb/tests/vault-repair.test.js` drives the real
+  force-delete/migrator path against a temp vault: dry-run removes nothing, `--apply` deletes only
+  empty scopes, and a project with real content is never force-deleted.
+- **CI** wires the remaining sb suites (`jsonl`, `markdown`, `vault`, `vault-repair`) and the
+  independence gate now also scans `*.sh`.
+
+### Changed
+
+- **sutra hardening (audit follow-ups).** Severity/priority are read only from labeled or
+  pipe-delimited fields (never a bare word in prose, F4); fences are matched by type (F5);
+  `checkReviews` warns on an unclosed fence instead of silently under-reporting (F1) and drops its
+  divergent Resolved pre-split (F2); the `artifacts` require is hoisted so early callers can't hit an
+  uninitialized binding (F3).
+- **sb lock hardening.** The unlocked fallback now logs its bypass (observable, not silent) and the
+  temp filename is collision-proof; the sequential map-lock→file-lock ordering is documented.
+- **Docs.** The README warns that the symlink installer and `/plugin install` each wire the same
+  hooks — pick one, not both (N2).
+
 ## [0.7.0] - 2026-07-04
 
 Introduces **sutra**, the orchestrator, and makes the three original members fully standalone

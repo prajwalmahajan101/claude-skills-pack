@@ -3,14 +3,14 @@
   "owner": { "name": "Prajwal Mahajan" },
   "metadata": {
     "description": "A pack of self-contained Claude Code skills — code_assist (developer-workflow powerhouse), sb (second-brain vault capture), unabridged (complete-output discipline) — plus sutra, the optional orchestrator that composes them. Each member is installable standalone; sutra makes the pack cooperate.",
-    "version": "0.7.0"
+    "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "code_assist",
       "source": "./skills/code_assist",
       "description": "Developer-workflow powerhouse — atomic commits, code review (blast-radius-grounded via graph review-prep), journals, plan/debug/verify/ADR, structure, release, onboard, secure (secret-scan/git-hooks), incident, integrations. Fully standalone. Zero-dep CLI + self-tests + agents + hooks.",
-      "version": "0.7.0",
+      "version": "1.0.0",
       "category": "workflow",
       "keywords": ["git", "code-review", "workflow", "debug", "plan", "release", "security", "incident", "graph", "gitnexus"]
     },
@@ -18,7 +18,7 @@
       "name": "sb",
       "source": "./skills/sb",
       "description": "Second-brain — captures conversations into a project-scoped Obsidian vault; lessons, tasks, kanban, connections. Self-healing vault-repair + linkage maintenance and optional auto lesson-mining. Generic vault-ingest primitive (fully standalone; the sutra orchestrator feeds it parsed repo artifacts).",
-      "version": "0.10.0",
+      "version": "1.0.0",
       "category": "knowledge",
       "keywords": ["second-brain", "obsidian", "notes", "memory", "ingest"]
     },
@@ -34,7 +34,7 @@
       "name": "sutra",
       "source": "./skills/sutra",
       "description": "Orchestrator — the optional 4th plugin that composes code_assist + sb + unabridged behind one unified /sutra:* surface (and a /sutra:do general agent). Owns the capability registry, the artifact interchange schema, cross-plugin recall, and the verify→lesson→recall feedback loop. Members stay standalone without it. Zero-dep CLI + self-tests + session hook.",
-      "version": "0.1.0",
+      "version": "1.0.0",
       "category": "orchestrator",
       "keywords": ["orchestrator", "bridge", "registry", "feedback-loop", "recall", "composition", "memory"]
     }
