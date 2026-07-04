@@ -1,0 +1,18 @@
+{
+  "_comment": "Maps the unified /sutra:* surface to members + bridge hooks. Tier-1 commands are hand-tuned composed flows (a member step wrapped in recall/graph/sync/loop/capture bridges). Everything else in a member's surface is reachable via /sutra:do (the general agent routes it) or the member's own namespace (/code_assist:*, /sb:*). This keeps the canonical composed surface maintainable instead of 81 rigid stubs.",
+  "tier1": {
+    "do":      { "agent": "sutra-agent", "note": "catch-all — routes any request across the pack" },
+    "recall":  { "cli": "recall", "note": "fused recall: code_assist base + sb vault" },
+    "sync":    { "cli": "sync-artifacts", "then": "sb:ingest", "note": "parse repo artifacts → vault" },
+    "capture": { "member": "sb", "runner": "lesson.js", "then": "loop-emit", "note": "capture a lesson + record loop event" },
+    "review":  { "member": "code_assist", "router": "code-review/ROUTER.md",
+                 "pre": ["recall", "graph review-prep"], "post": ["sync-artifacts→sb:ingest", "offer capture"] },
+    "commit":  { "member": "code_assist", "router": "git-commit/ROUTER.md",
+                 "pre": ["graph review-prep (impact on staged)"], "post": ["offer journal", "offer capture"] },
+    "verify":  { "member": "code_assist", "router": "verify/ROUTER.md",
+                 "pre": ["recall"], "post": ["loop-emit", "offer capture"] }
+  },
+  "passthrough": {
+    "note": "All other member capabilities — journal, plan, debug, adr, release, onboard, structure, refactor, secure, scan, github, track, notify, test, format, graph (code_assist); kanban, tasks, topic, search, connect, distill, emerge, health, decision (sb) — are reachable via /sutra:do or the member's own /<member>:<command>. /sutra:do composes bridges around them automatically."
+  }
+}

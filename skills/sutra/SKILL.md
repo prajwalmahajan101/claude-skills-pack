@@ -35,6 +35,12 @@ The command surface mirrors the members' capabilities under one namespace. Three
 `/sutra:*` is the **canonical, recommended** surface when the full pack is installed. It does not hide
 the members' own `/code_assist:*` and `/sb:*` namespaces — those remain for standalone use.
 
+**The catch-all: `/sutra:do <anything>`** dispatches any request to the **`sutra-agent`** subagent,
+which knows the entire ecosystem and composes members automatically. The Tier-1 commands
+(`/sutra:review`, `/sutra:commit`, `/sutra:verify`, `/sutra:recall`, `/sutra:sync`, `/sutra:capture`)
+are the same composition pre-wired for common flows. Every other member capability is reached via
+`/sutra:do` or the member's own namespace — see `commands/_manifest.json`.
+
 ## Step 3 — execute the wrapper
 
 Each command file in `commands/` is a thin delegator described by `commands/_manifest.json`:
