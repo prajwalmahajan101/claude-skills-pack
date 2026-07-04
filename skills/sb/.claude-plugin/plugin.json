@@ -5,5 +5,6 @@
   "author": { "name": "Prajwal Mahajan" },
   "keywords": [
     "second-brain", "obsidian", "notes", "lessons", "tasks", "kanban", "memory", "vault", "capture"
-  ]
+  ],
+  "hooks": "./hooks/hooks.json"
 }
