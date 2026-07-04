@@ -109,17 +109,22 @@ function parseIssues(text) {
   if (!text) return [];
   const out = [];
   const lines = String(text).split("\n");
-  const idRe = /\b(ISSUE-\d+)\b/;
+  // Anchor id detection to the START of a line (after optional heading/list/quote
+  // markup) so an ISSUE id mentioned in prose ("see ISSUE-011") is NOT treated as a
+  // new issue header — which would fabricate a phantom issue. Matches both the block
+  // form (`### ISSUE-001 — title`) and the inline form (`ISSUE-001 | High | P1`).
+  const idHead = /^[\s>#*\-|]*?(ISSUE-\d+)\b/;
+  const idRe = /\b(ISSUE-\d+)\b/; // loose — only used to strip the id from a confirmed header's title
   const sevRe = /\b(P0|P1|P2|P3|critical|high|medium|low)\b/i;
   for (let i = 0; i < lines.length; i++) {
     if (/^#{1,6}\s*resolved\b/i.test(lines[i].trim())) break;
-    const idm = lines[i].match(idRe);
+    const idm = lines[i].match(idHead);
     if (!idm) continue;
     let sev = (lines[i].match(sevRe) || [])[1] || "";
     if (!sev) {
-      // Scan the block (until the next ISSUE id or a heading) for the metadata line.
+      // Scan the block (until the next issue header or a heading) for the metadata line.
       for (let j = i + 1; j < lines.length; j++) {
-        if (idRe.test(lines[j]) || /^#{1,6}\s/.test(lines[j])) break;
+        if (idHead.test(lines[j]) || /^#{1,6}\s/.test(lines[j])) break;
         const m = lines[j].match(sevRe);
         if (m) { sev = m[1]; break; }
       }
