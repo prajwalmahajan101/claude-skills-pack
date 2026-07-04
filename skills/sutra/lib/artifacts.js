@@ -99,38 +99,68 @@ function normalizeSev(s) {
   return t || "unknown";
 }
 
+// Anchor id detection to the START of a line (after optional heading/list/quote
+// markup) so an ISSUE id mentioned in prose ("see ISSUE-011") is NOT treated as a
+// new issue header — which would fabricate a phantom issue. Matches both the block
+// form (`### ISSUE-001 — title`) and the inline form (`ISSUE-001 | High | P1`).
+const ISSUE_ID_HEAD = /^[\s>#*\-|]*?(ISSUE-\d+)\b/;
+// A fenced-code delimiter (``` or ~~~, optionally indented, with an optional info
+// string). Lines inside a fence are code, never issue headers.
+const FENCE_RE = /^\s*(```|~~~)/;
+
+// Collect the lines of an issue's block: everything after its header line up to the
+// next issue header or the next markdown heading. Fence-aware — a `###`/`ISSUE-` that
+// appears INSIDE a fenced code block does not terminate the block, so metadata after
+// an embedded snippet is still found. Returns the block as a single string.
+function issueBlock(lines, startIdx) {
+  const block = [];
+  let inFence = false;
+  for (let j = startIdx + 1; j < lines.length; j++) {
+    if (FENCE_RE.test(lines[j])) { inFence = !inFence; block.push(lines[j]); continue; }
+    if (!inFence && (ISSUE_ID_HEAD.test(lines[j]) || /^#{1,6}\s/.test(lines[j]))) break;
+    block.push(lines[j]);
+  }
+  return block.join("\n");
+}
+
 // Parse the active-issue tracker (code_review_issues.md) into structured issues.
 // Stops at a "## Resolved" section so resolved issues do not inflate the open count.
 // Handles BOTH code_assist layouts: inline (`ISSUE-001 | High | P1 | …`) and the
 // block form (`### ISSUE-001 — title` with `Severity: … · Priority: …` on a
-// following line). Severity is taken from the id's line, else the next few lines
-// of its block. Returns [{ id, severity, title }].
+// following line). Severity is taken from the id's line, else the block below it.
+// This is the SINGLE definition of "what is an issue" AND its severity/priority —
+// sutra's schema-check validates conformance off this same output (via checkReviews),
+// so what conformance considers a valid issue and what vault ingest records can never
+// diverge (H1). Skips lines inside fenced code blocks so a `### ISSUE-999` in a snippet
+// does not fabricate a phantom issue (H2). Severity and priority are taken from the id's
+// line first (inline form: `ISSUE-001 | High | P1`), else its block (block form:
+// `Severity: … · Priority: …`). Returns [{ id, severity, priority, title, index }]
+// (priority is "" when absent; index = the header's line number).
 function parseIssues(text) {
   if (!text) return [];
   const out = [];
   const lines = String(text).split("\n");
-  // Anchor id detection to the START of a line (after optional heading/list/quote
-  // markup) so an ISSUE id mentioned in prose ("see ISSUE-011") is NOT treated as a
-  // new issue header — which would fabricate a phantom issue. Matches both the block
-  // form (`### ISSUE-001 — title`) and the inline form (`ISSUE-001 | High | P1`).
-  const idHead = /^[\s>#*\-|]*?(ISSUE-\d+)\b/;
   const idRe = /\b(ISSUE-\d+)\b/; // loose — only used to strip the id from a confirmed header's title
-  const sevRe = /\b(P0|P1|P2|P3|critical|high|medium|low)\b/i;
+  const sevRe = /\b(critical|high|medium|low)\b/i;
+  const priRe = /\b(P[0-3])\b/i;
+  let inFence = false;
   for (let i = 0; i < lines.length; i++) {
+    if (FENCE_RE.test(lines[i])) { inFence = !inFence; continue; }
+    if (inFence) continue;
     if (/^#{1,6}\s*resolved\b/i.test(lines[i].trim())) break;
-    const idm = lines[i].match(idHead);
+    const idm = lines[i].match(ISSUE_ID_HEAD);
     if (!idm) continue;
     let sev = (lines[i].match(sevRe) || [])[1] || "";
-    if (!sev) {
-      // Scan the block (until the next issue header or a heading) for the metadata line.
-      for (let j = i + 1; j < lines.length; j++) {
-        if (idHead.test(lines[j]) || /^#{1,6}\s/.test(lines[j])) break;
-        const m = lines[j].match(sevRe);
-        if (m) { sev = m[1]; break; }
-      }
+    let pri = (lines[i].match(priRe) || [])[1] || "";
+    if (!sev || !pri) {
+      // Scan the block (until the next issue header or heading, fence-aware) for
+      // whichever of severity/priority the header line didn't already carry.
+      const block = issueBlock(lines, i);
+      if (!sev) { const m = block.match(sevRe); if (m) sev = m[1]; }
+      if (!pri) { const m = block.match(priRe); if (m) pri = m[1]; }
     }
     const title = lines[i].replace(idRe, "").replace(/^[\s|#>*\-—]+/, "").replace(/\s*\|\s*/g, " ").trim().slice(0, 160);
-    out.push({ id: idm[1], severity: normalizeSev(sev), title });
+    out.push({ id: idm[1], severity: normalizeSev(sev), priority: pri ? pri.toUpperCase() : "", title, index: i });
   }
   return out;
 }
@@ -174,4 +204,4 @@ function buildVaultPayload(root, project) {
   };
 }
 
-module.exports = { repoRoot, readJournals, readReviews, readAdrs, parseIssues, readRepoArtifacts, buildVaultPayload, normalizeSev };
+module.exports = { repoRoot, readJournals, readReviews, readAdrs, parseIssues, issueBlock, readRepoArtifacts, buildVaultPayload, normalizeSev };

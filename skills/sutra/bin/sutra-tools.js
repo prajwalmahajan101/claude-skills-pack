@@ -161,9 +161,6 @@ function repoRoot(dir) {
 
 const JOURNAL_FILE = /^M[0-9]+(\.[0-9]+)*\.md$/;
 const ADR_FILE = /^[0-9]{4}-[a-z0-9]+(-[a-z0-9]+)*\.md$/;
-const ISSUE_HEAD = /^###\s+ISSUE-[0-9]+\s+[—-]\s+.+/;
-const ISSUE_SEV = /Severity:\s*(Critical|High|Medium|Low)\b/i;
-const ISSUE_PRI = /Priority:\s*(P[0-3])\b/i;
 
 function checkJournals(root) {
   const dir = path.join(root, ".journal");
@@ -228,17 +225,15 @@ function checkReviews(root) {
     const body = fs.readFileSync(p, "utf8");
     const active = body.split(/^##\s+Resolved\b/im)[0]; // stop at Resolved section
     const lines = active.split("\n");
+    // Validate off artifacts.parseIssues — the SINGLE definition of "what is an issue"
+    // and its severity/priority. It is fence-aware and recognizes both the H3-block and
+    // inline header forms, so conformance here agrees exactly with what sync-artifacts
+    // ingests (H1) and a `### ISSUE-999` inside a fenced code block is ignored (H2). An
+    // issue conforms iff parseIssues resolved both a severity and a priority for it.
     let issueProblems = 0;
-    for (let i = 0; i < lines.length; i++) {
-      if (!ISSUE_HEAD.test(lines[i])) continue;
-      // Scan this issue's block — from its header until the next markdown heading
-      // (the next issue is itself a `###` heading) — rather than a fixed 7-line
-      // window, so metadata further down the block is still found.
-      const block = [];
-      for (let j = i + 1; j < lines.length && !/^#{1,6}\s/.test(lines[j]); j++) block.push(lines[j]);
-      const text = block.join("\n");
-      if (!ISSUE_SEV.test(text) || !ISSUE_PRI.test(text)) {
-        res.violations.push(`${rel}: ${lines[i].trim().slice(0, 60)} — missing valid Severity/Priority`);
+    for (const iss of artifacts.parseIssues(active)) {
+      if (iss.severity === "unknown" || !iss.priority) {
+        res.violations.push(`${rel}: ${lines[iss.index].trim().slice(0, 60)} — missing valid Severity/Priority`);
         issueProblems++;
       }
     }

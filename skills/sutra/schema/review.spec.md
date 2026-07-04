@@ -15,12 +15,21 @@ asserts that output still matches this spec, and sutra's `sync-artifacts` parses
 
 ## Required structure of `code_review_issues.md`
 Each issue is a block:
-1. An H3 header: `### ISSUE-NNN — <short title>` (`ISSUE-` + zero-padded number).
-   Regex: `^###\s+ISSUE-[0-9]+\s+[—-]\s+.+`.
-2. A metadata line carrying at least Severity and Priority:
+1. An issue header, in either form:
+   - **Block (canonical):** `### ISSUE-NNN — <short title>` (`ISSUE-` + zero-padded number).
+   - **Inline (recognized alternative):** `ISSUE-NNN | <Severity> | <Priority> | …` on a single line,
+     carrying the metadata inline.
+   The header id must sit at the start of a line (after optional heading/list/quote markup); an
+   `ISSUE-NNN` mentioned in prose is not a header. A header inside a fenced code block (` ``` `/`~~~`)
+   is a snippet, not a real issue, and is ignored.
+2. A metadata line (or inline header) carrying at least Severity and Priority:
    `` `Severity: Critical|High|Medium|Low` · `Priority: P0|P1|P2|P3` · `Effort: S|M|L` · `Category: …` ``
    Severity ∈ {Critical, High, Medium, Low}; Priority ∈ {P0, P1, P2, P3}.
 3. Resolved issues appear under a trailing `## Resolved` section; the active parser stops there.
+
+Both header forms and the fence/prose exclusions are defined once, in `lib/artifacts.js`
+(`parseIssues`); `schema-check`'s `checkReviews` reuses that same tokenizer so conformance and vault
+ingest can never disagree on what an issue is.
 
 ## Conformance
 `schema-check` reports the review state as **conforming** when `code_review_issues.md` exists and every
