@@ -102,3 +102,59 @@ test("selfcheck summarizes the pack without throwing", () => {
   assert.equal(sc.name, "sutra");
   assert.deepEqual(sc.present.sort(), ["code_assist", "unabridged"]);
 });
+
+// --- schema conformance -----------------------------------------------------
+const GOOD_FIXTURE = path.join(__dirname, "..", "schema", "conformance", "good-repo");
+
+// Copy a dir tree into a fresh (non-git) tmp dir so schemaCheck's repoRoot
+// resolves to the copy, not the enclosing sutra repo.
+function stageRepo(fixture) {
+  const d = tmp();
+  fs.cpSync(fixture, d, { recursive: true });
+  return d;
+}
+
+test("schema-check passes on the good-repo fixture", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const res = sutra.schemaCheck(repo);
+  assert.equal(res.ok, true, JSON.stringify(res, null, 2));
+  assert.equal(res.journal.conforming, 1);
+  assert.equal(res.adr.conforming, 1);
+  assert.equal(res.review.found, 1);
+  assert.equal(res.review.violations.length, 0, "resolved malformed issue is ignored");
+});
+
+test("schema-check flags a journal missing its M<phase> H1", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  fs.writeFileSync(path.join(repo, ".journal", "M2.0.md"), "# not a phase header\n\nbody\n");
+  const res = sutra.schemaCheck(repo);
+  assert.equal(res.ok, false);
+  assert.ok(res.journal.violations.some((v) => v.includes("M2.0.md")));
+});
+
+test("schema-check flags an ADR missing a required section", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  fs.writeFileSync(path.join(repo, "docs", "adr", "0002-broken.md"),
+    "# 2. Broken\n\n- Status: accepted\n- Date: 2026-07-04\n\n## Context\nx\n## Decision\ny\n");
+  const res = sutra.schemaCheck(repo);
+  assert.equal(res.ok, false);
+  assert.ok(res.adr.violations.some((v) => v.includes("Consequences")));
+});
+
+test("schema-check flags an active issue with no Severity/Priority", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  fs.writeFileSync(p, "# Issues\n\n### ISSUE-009 — no metadata\n\njust a description\n");
+  const res = sutra.schemaCheck(repo);
+  assert.equal(res.ok, false);
+  assert.ok(res.review.violations.some((v) => v.includes("ISSUE-009")));
+});
+
+test("schema-check is clean (not violating) when no artifacts exist", () => {
+  const repo = tmp();
+  const res = sutra.schemaCheck(repo);
+  assert.equal(res.ok, true);
+  assert.equal(res.journal.found, 0);
+  assert.equal(res.adr.found, 0);
+  assert.equal(res.review.found, 0);
+});
