@@ -14,10 +14,13 @@ allowed-tools:
    node ~/.claude/skills/sb/commands/_runners/lesson.js "$ARGUMENTS"
    ```
 
-2. Record it in the pack's feedback loop (durable even if sb is absent):
+2. Record it in the pack's feedback loop (durable even if sb is absent). **Append `--risk`** when the
+   takeaway is a risk/gotcha — that is what `/sutra:recall` prioritizes next time:
 
    ```bash
-   node ~/.claude/skills/sutra/bin/sutra-tools.js loop-emit --event capture --note "$ARGUMENTS" [--risk]
+   node ~/.claude/skills/sutra/bin/sutra-tools.js loop-emit --event capture --note "$ARGUMENTS"
+   # add --risk when the lesson is a risk:
+   # node ~/.claude/skills/sutra/bin/sutra-tools.js loop-emit --event capture --note "$ARGUMENTS" --risk
    ```
 
 Lessons tagged `risk` are exactly what `/sutra:recall` surfaces in future work — writing out feeds the
