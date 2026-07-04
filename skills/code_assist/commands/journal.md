@@ -29,6 +29,6 @@ Interpret as follows:
 
 <process>
 1. Confirm you are inside a git repository (`git rev-parse --is-inside-work-tree`). If not, tell the user and stop.
-2. Read `/home/prjawal/.claude/skills/code_assist/journal/ROUTER.md` fully and execute it.
+2. Read `~/.claude/skills/code_assist/journal/ROUTER.md` fully and execute it.
 3. Respect the sub-skill's rules: never overwrite existing entries silently, never invent commits or shas, never leak secrets, never commit the journal file.
 </process>

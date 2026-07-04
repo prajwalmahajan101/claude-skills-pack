@@ -19,7 +19,7 @@ Pick exactly one sub-skill and follow it. Do not duplicate its logic here.
 
 1. Confirm you are inside a git repository (`git rev-parse --is-inside-work-tree`). If not, tell the user and stop.
 2. Decide mode from the user's message using the table above. When ambiguous, default to **interactive**.
-3. Read `/home/prjawal/.claude/skills/code_assist/git-commit/shared.md` for commit-message format and global rules.
+3. Read `~/.claude/skills/code_assist/git-commit/shared.md` for commit-message format and global rules.
 4. Read the chosen sub-skill file (`plan.md` or `interactive.md`) and execute it exactly.
 
 Both sub-skills inherit the rules in `shared.md`.

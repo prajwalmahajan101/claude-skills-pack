@@ -24,8 +24,8 @@ No other inputs are required. The working tree is your source of truth.
 <step name="bootstrap">
 Read these two source-of-truth files in full before doing anything else:
 
-1. `/home/prjawal/.claude/skills/code_assist/git-commit/shared.md` — commit message format, type list, summary rules, global rules.
-2. `/home/prjawal/.claude/skills/code_assist/git-commit/plan.md` — the exact plan-mode workflow you are executing.
+1. `~/.claude/skills/code_assist/git-commit/shared.md` — commit message format, type list, summary rules, global rules.
+2. `~/.claude/skills/code_assist/git-commit/plan.md` — the exact plan-mode workflow you are executing.
 
 Do not invent your own commit-message format or commit types.
 </step>
