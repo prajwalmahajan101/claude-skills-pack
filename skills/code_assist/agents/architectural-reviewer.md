@@ -39,8 +39,8 @@ If `stack` or `state_dir` is missing from your prompt, return an error in the co
 <step name="bootstrap">
 Read these two source-of-truth files in full before doing anything else:
 
-1. `/home/prjawal/.claude/skills/code_assist/code-review/shared.md` — the workflow, output format, state-file rules, and Step 5/6 living-doc semantics.
-2. `/home/prjawal/.claude/skills/code_assist/code-review/<stack>.md` (where `<stack>` is your input) — the weight table and anti-pattern checklist for this stack.
+1. `~/.claude/skills/code_assist/code-review/shared.md` — the workflow, output format, state-file rules, and Step 5/6 living-doc semantics.
+2. `~/.claude/skills/code_assist/code-review/<stack>.md` (where `<stack>` is your input) — the weight table and anti-pattern checklist for this stack.
 
 These files are the single source of truth. Do not invent your own weights, output format, or living-doc rules.
 </step>

@@ -28,7 +28,7 @@ If the user's message contains any of: "review my changes", "review this PR", "r
 
 ## Step 1: Detect Stack
 
-Read and execute `/home/prjawal/.claude/skills/code_assist/code-review/detect.md`. It returns one of:
+Read and execute `~/.claude/skills/code_assist/code-review/detect.md`. It returns one of:
 
 - `backend`
 - `frontend`

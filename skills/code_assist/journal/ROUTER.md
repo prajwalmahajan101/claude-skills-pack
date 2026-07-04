@@ -21,7 +21,7 @@ Pick exactly one sub-skill and follow it. Do not duplicate its logic here.
 2. Resolve the target entry path per `shared.md` → Phase Identifier.
 3. If the file does **not** exist → use `new.md`.
 4. If the file **does** exist → use `update.md` (unless the user explicitly asks for a fresh entry; then confirm before overwriting).
-5. Read `/home/prjawal/.claude/skills/code_assist/journal/shared.md` for template structure and global rules.
+5. Read `~/.claude/skills/code_assist/journal/shared.md` for template structure and global rules.
 6. Read the chosen sub-skill file and execute it exactly.
 
 Both sub-skills inherit the rules in `shared.md`.

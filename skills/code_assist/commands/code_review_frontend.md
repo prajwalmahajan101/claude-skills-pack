@@ -18,8 +18,8 @@ Run the code-review workflow with the **frontend** variant. Skip stack detection
 
 <process>
 1. Confirm you are inside a git repository. If not, tell the user and stop.
-2. Read `/home/prjawal/.claude/skills/code_assist/code-review/shared.md`.
-3. Read `/home/prjawal/.claude/skills/code_assist/code-review/frontend.md`.
+2. Read `~/.claude/skills/code_assist/code-review/shared.md`.
+3. Read `~/.claude/skills/code_assist/code-review/frontend.md`.
 4. Execute Steps 1–6 from `shared.md` using the weight table and anti-pattern checklist from `frontend.md`.
 5. State files live at `.code_review/` (flat layout).
 </process>

@@ -29,9 +29,9 @@ If required inputs are missing and cannot be derived, ask the orchestrator (not 
 <step name="bootstrap">
 Read these three source-of-truth files in full before doing anything else:
 
-1. `/home/prjawal/.claude/skills/code_assist/journal/shared.md` — template structure, phase identifier discovery, global rules.
-2. `/home/prjawal/.claude/skills/code_assist/journal/new.md` — new-entry workflow.
-3. `/home/prjawal/.claude/skills/code_assist/journal/update.md` — update workflow.
+1. `~/.claude/skills/code_assist/journal/shared.md` — template structure, phase identifier discovery, global rules.
+2. `~/.claude/skills/code_assist/journal/new.md` — new-entry workflow.
+3. `~/.claude/skills/code_assist/journal/update.md` — update workflow.
 
 Then read `<repo_root>/.journal/TEMPLATE.md` if it exists. **The project template wins** when its structure diverges from the canonical one in `shared.md`.
 

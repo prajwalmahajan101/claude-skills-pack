@@ -25,6 +25,6 @@ Interpret as follows:
 
 <process>
 1. Confirm you are inside a git repository (`git rev-parse --is-inside-work-tree`). If not, tell the user and stop.
-2. Read `/home/prjawal/.claude/skills/code_assist/git-commit/ROUTER.md` fully and execute it.
+2. Read `~/.claude/skills/code_assist/git-commit/ROUTER.md` fully and execute it.
 3. Respect the sub-skill's rules: specific file staging only, no `--no-verify`, no amend without explicit user request, new commit on hook failure.
 </process>
