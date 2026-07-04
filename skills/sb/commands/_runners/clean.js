@@ -12,7 +12,7 @@ const path = require("node:path");
 const os = require("node:os");
 
 const SKILL_LIB = path.join(__dirname, "..", "..", "lib");
-const { VAULT, paths, readSessionMap, writeSessionMap, projectSlugFromCwd, DIR, EXCLUDE_FOLDERS } = require(path.join(SKILL_LIB, "vault.js"));
+const { VAULT, paths, readSessionMap, writeSessionMap, projectSlugFromCwd, DIR, EXCLUDE_FOLDERS, logDiag } = require(path.join(SKILL_LIB, "vault.js"));
 const { parseFrontmatter, fm } = require(path.join(SKILL_LIB, "markdown.js"));
 const { mergeTags, rebuildTagsIndex } = require(path.join(SKILL_LIB, "tagger.js"));
 
@@ -112,7 +112,10 @@ for (const t of tagFixes) {
     meta.tags = t.after;
     fs.writeFileSync(t.f, fm(meta) + body);
     n++;
-  } catch {}
+  } catch (e) {
+    // A skipped rewrite under --apply must not look like success — log it.
+    logDiag(`clean: tag rewrite skipped for ${t.f} (${e.message})`);
+  }
 }
 console.log(`Cleaned tags in ${n} notes.`);
 
