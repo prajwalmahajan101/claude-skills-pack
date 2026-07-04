@@ -360,6 +360,14 @@ test("sync-artifacts payload feeds sb's ingest.js and lands notes + open issues"
   assert.match(index, new RegExp(`${payload.openIssues.length} open`), "issue count matches the payload");
 });
 
+test("loop-emit reports resolvedVia:cwd when the target is not a git repo", () => {
+  const repo = tmp(); // a fresh non-git dir
+  const res = withSkills(fakeSkills({}), () => sutra.loopEmit(["--event", "verify", "--note", "x", "--dir", repo]));
+  assert.equal(res.ok, true);
+  assert.equal(res.resolvedVia, "cwd", "non-repo write is observable, not silent");
+  assert.ok(res.logged.startsWith(fs.realpathSync(repo)) || res.logged.startsWith(repo), "wrote under the given dir");
+});
+
 test("loop-emit appends a durable feedback event", () => {
   // Always pin --dir to a tmp dir so the test never writes into the real repo.
   const repo = tmp(), repo2 = tmp();
