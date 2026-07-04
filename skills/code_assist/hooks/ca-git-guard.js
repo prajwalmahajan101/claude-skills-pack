@@ -38,6 +38,10 @@ function main() {
     }
     // Secret scan of staged content (deterministic; the same detectors as `secure`).
     for (const s of stagedSecrets(cwd)) {
+      if (s.rule === "scan-truncated") {
+        warnings.push(`staged secret scan capped — ${s.file} ${s.masked}.`);
+        continue;
+      }
       warnings.push(`possible secret staged — ${s.rule} at ${s.file}:${s.line} (${s.masked}). ` +
         `Remove it, use env/secret-manager, or annotate with \`# ca:allow-secret\` if a false positive.`);
     }
@@ -64,8 +68,17 @@ function stagedSecrets(cwd) {
   try {
     const tools = require(path.join(__dirname, "..", "bin", "ca-tools.js"));
     if (!tools || typeof tools.secretScan !== "function") return [];
-    const r = tools.secretScan(["--staged", "--dir", cwd]);
-    return (r && r.findings) ? r.findings.slice(0, 5) : [];
+    // Bounded: cap files + per-file timeout + skip external gitleaks so this
+    // PreToolUse hook stays well under its 5s budget (never silently fails open).
+    const r = tools.secretScan(["--staged", "--dir", cwd, "--max-files", "200", "--no-tools"]);
+    if (!r || !r.findings) return [];
+    const out = r.findings.slice(0, 5);
+    // Don't let a capped scan look like a clean one — flag the gap explicitly.
+    if (r.truncated > 0) {
+      out.push({ rule: "scan-truncated", file: `${r.truncated} more staged file(s)`, line: 0,
+        masked: "not scanned in-hook — run /code_assist:secure for a full scan" });
+    }
+    return out;
   } catch { return []; }
 }
 

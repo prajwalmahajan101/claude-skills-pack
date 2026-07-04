@@ -552,8 +552,8 @@ function loadSecretsIgnore(dir) {
   try { return fs.readFileSync(path.join(dir, ".ca-secretsignore"), "utf8").split("\n")
     .map((l) => l.trim()).filter((l) => l && !l.startsWith("#")); } catch { return []; }
 }
-function stagedContent(dir, file) {
-  const r = sh("git", ["-C", dir, "show", ":" + file]);
+function stagedContent(dir, file, timeout) {
+  const r = sh("git", ["-C", dir, "show", ":" + file], timeout ? { timeout } : {});
   return r.status === 0 ? r.stdout : null;
 }
 function scanText(text, file, findings, ignore) {
@@ -578,12 +578,19 @@ function secretScan(args) {
   const findings = [];
   let files = [];
   let mode;
+  let truncated = 0;
+  // Bounded mode (used by the 5s PreToolUse guard): cap the file count and give each
+  // `git show` a timeout so a huge staged set can't blow the hook budget and make it
+  // silently fail open. --no-tools skips the external gitleaks call for the same reason.
+  const maxFiles = Number(f["max-files"] || 0);
+  const noTools = !!f["no-tools"];
   if (f.staged) {
     mode = "staged";
     if (!inRepo(dir)) return { ok: false, reason: "not a git repository" };
     const r = sh("git", ["-C", dir, "diff", "--cached", "--name-only", "--diff-filter=ACM"]);
     files = r.stdout.split("\n").filter(Boolean);
-    for (const file of files) { const c = stagedContent(dir, file); if (c != null) scanText(c, file, findings, ignore); }
+    if (maxFiles > 0 && files.length > maxFiles) { truncated = files.length - maxFiles; files = files.slice(0, maxFiles); }
+    for (const file of files) { const c = stagedContent(dir, file, maxFiles > 0 ? 3000 : 0); if (c != null) scanText(c, file, findings, ignore); }
   } else if (f.range) {
     mode = "range:" + f.range;
     const r = sh("git", ["-C", dir, "diff", "--name-only", "--diff-filter=ACM", String(f.range)]);
@@ -603,7 +610,7 @@ function secretScan(args) {
   }
   // Prefer gitleaks when present (best-effort merge; never fails the scan).
   let tool = "builtin";
-  if (have("gitleaks") && f.staged && inRepo(dir)) {
+  if (!noTools && have("gitleaks") && f.staged && inRepo(dir)) {
     const g = sh("gitleaks", ["protect", "--staged", "--source", dir, "--report-format", "json", "--report-path", "/dev/stdout", "--no-banner"], { timeout: 20000 });
     if (g.stdout) {
       try {
@@ -618,7 +625,7 @@ function secretScan(args) {
       } catch {}
     }
   }
-  return { mode, tool, scanned: files.length, count: findings.length, findings };
+  return { mode, tool, scanned: files.length, truncated, count: findings.length, findings };
 }
 
 function depsAudit(dir) {

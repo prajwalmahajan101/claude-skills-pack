@@ -269,6 +269,18 @@ test("secretScan --staged reads staged blobs in a repo", () => {
   const r = ca.secretScan(["--staged", "--dir", d]);
   assert.equal(r.mode, "staged");
   assert.ok(r.count >= 1 && r.findings[0].rule === "aws-access-key");
+  assert.equal(r.truncated, 0, "no cap by default");
+});
+
+test("secretScan --max-files caps the staged set and reports the truncation", () => {
+  const d = initRepo();
+  for (let i = 0; i < 4; i++) {
+    fs.writeFileSync(path.join(d, `f${i}.txt`), `line ${i}\n`);
+    git(d, "add", `f${i}.txt`);
+  }
+  const r = ca.secretScan(["--staged", "--dir", d, "--max-files", "2", "--no-tools"]);
+  assert.equal(r.scanned, 2, "only the cap is scanned");
+  assert.equal(r.truncated, 2, "remaining files reported as truncated, not silently dropped");
 });
 
 test("installGitHooks is dry-run by default, applies + sets hooksPath, and is idempotent", () => {
