@@ -15,6 +15,13 @@ fresh-eyes audit (see `docs/KNOWN_ISSUES.md` for the remaining lower-severity it
 
 ### Fixed
 
+- **sb — install hooks via settings.json only.** `install.sh` copied the plugin manifest
+  `hooks/hooks.json` into the installed skill dir while the `sb-*.js` scripts went to the flat
+  `~/.claude/hooks`. Loaded as a `@skills-dir` plugin, the manifest auto-registered a second copy of
+  the hooks whose `${CLAUDE_PLUGIN_ROOT}/hooks/*.js` paths did not exist → `MODULE_NOT_FOUND` on every
+  `Stop`/`SubagentStop`/`PreCompact`. The installer now registers hooks through `settings.json` only,
+  no longer installs the manifest (kept in-repo for `/plugin install`), and self-heals prior installs.
+  `uninstall.sh` also removes `sb-validate.js` and strips it from `settings.json`.
 - **sutra — one issue tokenizer (H1).** `schema-check`'s `checkReviews` now validates off
   `artifacts.parseIssues`, the single definition of "what is an issue" and its severity/priority, so
   conformance and vault ingest can never disagree. An inline-form issues file is validated, not
