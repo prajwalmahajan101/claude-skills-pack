@@ -10,7 +10,7 @@ const os = require("node:os");
 const { spawnSync } = require("node:child_process");
 
 const SKILL_LIB = path.join(__dirname, "..", "lib");
-const { readSessionMap, writeSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
+const { updateSessionMap, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 
 try { main(); } catch (e) { logErr(e); }
 
@@ -26,15 +26,18 @@ function main() {
     spawnSync(process.execPath, [captureHook], { input, encoding: "utf8", timeout: 8000 });
   }
 
-  const map = readSessionMap();
-  const entry = map[sessionId];
-  const reason = entry?.pendingClear ? "cleared" : "clean-exit";
-
-  if (entry?.pendingClear) {
-    delete entry.pendingClear;
-    map[sessionId] = entry;
-    writeSessionMap(map);
-  }
+  // Read the reason and clear the pending-clear flag under the session-map lock so
+  // this whole-map write can't clobber a concurrent capture hook's byteOffset/turn
+  // update to a different session key.
+  let reason = "clean-exit";
+  updateSessionMap((map) => {
+    const entry = map[sessionId];
+    if (entry?.pendingClear) {
+      reason = "cleared";
+      delete entry.pendingClear;
+      map[sessionId] = entry;
+    }
+  });
 
   markSessionEnded(sessionId, reason);
 }
