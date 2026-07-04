@@ -77,11 +77,14 @@ function readAdrs(root) {
   const out = [];
   for (const f of fs.readdirSync(dir)) {
     if (!f.endsWith(".md") || f === "0000-template.md" || /^index\.md$/i.test(f)) continue;
-    const m = f.match(/^(\d{3,4})-/);
+    // Only canonical 4-digit NNNN-<slug>.md ADRs — matches schema-check's ADR_FILE
+    // so the two code paths agree on what counts as an ADR.
+    const m = f.match(/^(\d{4})-/);
+    if (!m) continue;
     try {
       const content = fs.readFileSync(path.join(dir, f), "utf8");
       const h1 = (content.split("\n").find((l) => l.startsWith("# ")) || "").replace(/^#\s+/, "").trim();
-      out.push({ num: m ? m[1] : null, name: f, title: h1, content });
+      out.push({ num: m[1], name: f, title: h1, content });
     } catch {}
   }
   return out;
