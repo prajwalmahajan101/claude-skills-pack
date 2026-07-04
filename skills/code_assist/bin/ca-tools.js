@@ -31,6 +31,7 @@
  *   env-check [dir]               .env vs .env.example key drift (names only)
  *   install-git-hooks [dir] [--apply]     write .githooks + core.hooksPath (dry-run default)
  *   uninstall-git-hooks [dir] [--apply]   revert core.hooksPath
+ *   incident-scaffold --title T [--apply] next-numbered docs/incidents/NNNN-*.md (+ base tag)
  *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
@@ -730,6 +731,40 @@ function uninstallGitHooks(args) {
 function safeRead(p) { try { return fs.readFileSync(p, "utf8"); } catch { return ""; } }
 
 // ---------------------------------------------------------------------------
+// incident — scaffold a numbered blameless postmortem (mirrors ADR numbering);
+// surface the latest release tag as the hotfix base.
+// ---------------------------------------------------------------------------
+function slugify(s) {
+  return String(s || "incident").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "incident";
+}
+function incidentScaffold(args) {
+  const f = flags(args);
+  const dir = f.dir || ".";
+  const title = f.title || f._.join(" ") || "untitled incident";
+  const incDir = path.join(dir, "docs", "incidents");
+  let max = 0;
+  try {
+    for (const fn of fs.readdirSync(incDir)) { const m = fn.match(/^(\d{4})-/); if (m) max = Math.max(max, Number(m[1])); }
+  } catch {}
+  const num = String(max + 1).padStart(4, "0");
+  const slug = slugify(title);
+  const file = path.join(incDir, `${num}-${slug}.md`);
+  const base = lastTag(dir) || "(no release tag yet)";
+  const tmpl = githookSafeTemplate("incident-0000-template.md")
+    .replace(/<NNNN>/g, num).replace(/<TITLE>/g, title).replace(/<BASE_TAG>/g, base);
+  if (f.apply || f.write) {
+    fs.mkdirSync(incDir, { recursive: true });
+    if (fs.existsSync(file)) return { ok: false, reason: "already exists: " + file };
+    fs.writeFileSync(file, tmpl);
+    return { file: path.relative(dir, file), number: num, base_tag: base, written: true };
+  }
+  return { file: path.relative(dir, file), number: num, base_tag: base, written: false, hint: "re-run with --apply to write", preview: tmpl };
+}
+function githookSafeTemplate(name) {
+  return fs.readFileSync(path.join(__dirname, "..", "structure", "templates", name), "utf8");
+}
+
+// ---------------------------------------------------------------------------
 // bridge — detect sibling skills + describe handoffs (now bidirectional)
 // ---------------------------------------------------------------------------
 function bridge(args) {
@@ -992,6 +1027,7 @@ async function main() {
     case "env-check": return out(envCheck(flags(rest)._[0]));
     case "install-git-hooks": return out(installGitHooks(rest));
     case "uninstall-git-hooks": return out(uninstallGitHooks(rest));
+    case "incident-scaffold": return out(incidentScaffold(rest));
     case "github": return out(github(rest));
     case "track": return out(await track(rest));
     case "notify": return out(await notify(rest));
@@ -1011,6 +1047,6 @@ if (require.main === module) {
     detectStack, classifyFile, structureAudit, structureScaffold,
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
     track, notify, bridge, flags, recall, secretScan, depsAudit, envCheck,
-    installGitHooks, uninstallGitHooks,
+    installGitHooks, uninstallGitHooks, incidentScaffold,
   };
 }

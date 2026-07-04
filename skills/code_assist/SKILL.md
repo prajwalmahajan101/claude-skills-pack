@@ -34,6 +34,7 @@ Preconditions: if not in a git repository, say so and stop (except `plan brainst
 | Notify - Slack / Telegram | `notify/ROUTER.md` | `/code_assist:notify` |
 | Scan - SonarQube / Semgrep (review pre-pass) | `scan/ROUTER.md` | `/code_assist:scan` |
 | Secure - secret-scan / deps-audit / env-check | `secure/ROUTER.md` | `/code_assist:secure` |
+| Incident - hotfix path + blameless postmortem | `incident/ROUTER.md` | `/code_assist:incident` |
 | Graph - code intelligence (gitnexus/graphify) | `graph/ROUTER.md` | `/code_assist:graph` |
 | Onboard - architecture map + seed CLAUDE.md | `onboard/ROUTER.md` | `/code_assist:onboard` |
 | Test - TDD (failing test first) | `test/ROUTER.md` | `/code_assist:test` |
