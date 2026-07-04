@@ -166,6 +166,19 @@ test("schema-check flags an active issue with no Severity/Priority", () => {
   assert.ok(res.review.violations.some((v) => v.includes("ISSUE-009")));
 });
 
+test("parseIssues ignores an ISSUE id mentioned in prose (no phantom issue)", () => {
+  const block = "### ISSUE-001 — real\nSeverity: High · Priority: P1\nsee ISSUE-011 for related context\n";
+  const issues = sutra.artifacts.parseIssues(block);
+  assert.deepEqual(issues.map((i) => i.id), ["ISSUE-001"], "prose reference to ISSUE-011 is not a new issue");
+  assert.equal(issues[0].severity, "high");
+});
+
+test("parseIssues still parses inline and block layouts with severity", () => {
+  const inline = sutra.artifacts.parseIssues("ISSUE-002 | High | P1 | broken\n| ISSUE-003 | Low | P3 | nit |\n");
+  assert.deepEqual(inline.map((i) => i.id), ["ISSUE-002", "ISSUE-003"]);
+  assert.deepEqual(inline.map((i) => i.severity), ["high", "low"]);
+});
+
 test("schema-check accepts an issue whose Severity/Priority is far below the header", () => {
   const repo = stageRepo(GOOD_FIXTURE);
   const p = path.join(repo, ".code_review", "code_review_issues.md");
