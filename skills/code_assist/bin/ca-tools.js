@@ -47,7 +47,7 @@ const path = require("node:path");
 const cp = require("node:child_process");
 const os = require("node:os");
 
-const VERSION = "0.1.0";
+const VERSION = "0.6.0";
 
 // ---------------------------------------------------------------------------
 // arg parsing

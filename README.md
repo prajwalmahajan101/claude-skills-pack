@@ -6,7 +6,7 @@ installable - and, together, a **plugin marketplace** (`.claude-plugin/marketpla
 | Skill | What it does | Slash commands | Agents | Hooks |
 |---|---|---|---|---|
 | [**sb**](./skills/sb) | Persistent second-brain - captures every Claude Code conversation into an Obsidian vault, analyzes them into lessons, kanban tasks, topics, and cross-project connections. | 22 (`/sb:*`) | 0 | 5 |
-| [**code_assist**](./skills/code_assist) | Developer-workflow powerhouse - atomic commits, stack-aware code review, journals, plan/debug/verify/ADR discipline, structure/release/onboard/refactor, and github/jira/slack/sonar/graph integrations. Zero-dep CLI + self-tests + subagents. | 31 (`/code_assist:*`) | 7 | 2 |
+| [**code_assist**](./skills/code_assist) | Developer-workflow powerhouse - atomic commits, stack-aware code review, journals, plan/debug/verify/ADR discipline, structure/release/onboard/refactor, **secure** (secret-scan + installable git-hooks), **incident** (hotfix + postmortem), github/jira/slack/sonar/graph integrations, and a **bidirectional memory bridge** (recall past lessons/risks). Zero-dep CLI + self-tests + subagents. | 37 (`/code_assist:*`) | 7 | 2 |
 | [**unabridged**](./skills/unabridged) | Forces complete, untruncated output. No `// ...`, no "for brevity", no skeleton responses. | 0 (context skill) | 0 | 0 |
 
 ## As a plugin marketplace
