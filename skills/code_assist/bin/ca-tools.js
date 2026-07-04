@@ -29,6 +29,8 @@
  *   secret-scan --staged|<paths>  detect committed secrets (masked; never prints values)
  *   deps-audit [dir]              read-only vuln audit (npm/pip/cargo/go)
  *   env-check [dir]               .env vs .env.example key drift (names only)
+ *   install-git-hooks [dir] [--apply]     write .githooks + core.hooksPath (dry-run default)
+ *   uninstall-git-hooks [dir] [--apply]   revert core.hooksPath
  *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
@@ -681,6 +683,53 @@ function envCheck(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// git-hooks — install the SAME guardrails at the git layer so they hold outside
+// a Claude Code session. Writes .githooks/{pre-commit,commit-msg} + core.hooksPath.
+// ---------------------------------------------------------------------------
+const GITHOOK_NAMES = ["pre-commit", "commit-msg"];
+function githookTemplate(name) {
+  return fs.readFileSync(path.join(__dirname, "..", "structure", "templates", "githooks", name), "utf8");
+}
+function installGitHooks(args) {
+  const f = flags(args);
+  const dir = f._[0] || f.dir || ".";
+  const apply = !!f.apply;
+  if (!inRepo(dir)) return { ok: false, reason: "not a git repository: " + path.resolve(dir) };
+  const hooksRel = ".githooks";
+  const hooksDir = path.join(dir, hooksRel);
+  const currentPath = sh("git", ["-C", dir, "config", "--get", "core.hooksPath"]).stdout;
+  const planned = [];
+  for (const name of GITHOOK_NAMES) {
+    const dest = path.join(hooksDir, name);
+    let action = "create";
+    if (fs.existsSync(dest)) action = githookTemplate(name) === safeRead(dest) ? "skip (current)" : "update";
+    planned.push({ file: `${hooksRel}/${name}`, action });
+  }
+  planned.push({ config: "core.hooksPath", from: currentPath || "(unset)", to: hooksRel,
+    action: currentPath === hooksRel ? "skip (current)" : "set" });
+  if (!apply) return { dir: path.resolve(dir), apply: false, planned, hint: "re-run with --apply to write" };
+  fs.mkdirSync(hooksDir, { recursive: true });
+  for (const name of GITHOOK_NAMES) {
+    const dest = path.join(hooksDir, name);
+    fs.writeFileSync(dest, githookTemplate(name));
+    fs.chmodSync(dest, 0o755);
+  }
+  sh("git", ["-C", dir, "config", "core.hooksPath", hooksRel]);
+  return { dir: path.resolve(dir), apply: true, planned, hooksPath: hooksRel,
+    note: "guardrails now run on every git commit (plain terminal too). CA_DISABLE=1 mutes; CA_GIT_GUARD_STRICT=1 blocks." };
+}
+function uninstallGitHooks(args) {
+  const f = flags(args);
+  const dir = f._[0] || f.dir || ".";
+  if (!inRepo(dir)) return { ok: false, reason: "not a git repository: " + path.resolve(dir) };
+  const had = sh("git", ["-C", dir, "config", "--get", "core.hooksPath"]).stdout;
+  if (!f.apply) return { dir: path.resolve(dir), apply: false, would_unset: "core.hooksPath", current: had || "(unset)", hint: "re-run with --apply" };
+  if (had === ".githooks") sh("git", ["-C", dir, "config", "--unset", "core.hooksPath"]);
+  return { dir: path.resolve(dir), apply: true, unset: had === ".githooks", note: ".githooks/ files left in place; delete manually if unwanted." };
+}
+function safeRead(p) { try { return fs.readFileSync(p, "utf8"); } catch { return ""; } }
+
+// ---------------------------------------------------------------------------
 // bridge — detect sibling skills + describe handoffs (now bidirectional)
 // ---------------------------------------------------------------------------
 function bridge(args) {
@@ -931,9 +980,18 @@ async function main() {
     case "onboard-scan": return out(onboardScan(f._[0] || "."));
     case "selfcheck": return out(selfcheck());
     case "recall": return out(recall(rest));
-    case "secret-scan": return out(secretScan(rest));
+    case "secret-scan": {
+      const res = secretScan(rest);
+      if (flags(rest)["exit-code"]) {
+        for (const x of (res.findings || [])) process.stderr.write(`  secret: ${x.rule} ${x.file}:${x.line} (${x.masked})\n`);
+        process.exit((res.findings || []).length ? 1 : 0);
+      }
+      return out(res);
+    }
     case "deps-audit": return out(depsAudit(flags(rest)._[0]));
     case "env-check": return out(envCheck(flags(rest)._[0]));
+    case "install-git-hooks": return out(installGitHooks(rest));
+    case "uninstall-git-hooks": return out(uninstallGitHooks(rest));
     case "github": return out(github(rest));
     case "track": return out(await track(rest));
     case "notify": return out(await notify(rest));
@@ -953,5 +1011,6 @@ if (require.main === module) {
     detectStack, classifyFile, structureAudit, structureScaffold,
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
     track, notify, bridge, flags, recall, secretScan, depsAudit, envCheck,
+    installGitHooks, uninstallGitHooks,
   };
 }

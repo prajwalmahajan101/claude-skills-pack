@@ -1,0 +1,30 @@
+#!/bin/sh
+# code_assist pre-commit — enforces conventions + secret-scan at the GIT layer, so the
+# guardrails hold in a plain terminal too (not only inside a Claude Code session). It mirrors
+# the ca-git-guard hook. Installed by `ca-tools install-git-hooks`.
+#   Disable entirely:      CA_DISABLE=1
+#   Block on protected br: CA_GIT_GUARD_STRICT=1   (default is warn-only for the branch check)
+[ "$CA_DISABLE" = "1" ] && exit 0
+
+CA="${CA_TOOLS:-$HOME/.claude/skills/code_assist/bin/ca-tools.js}"
+rc=0
+
+# 1. Secret scan of staged content (blocks the commit on a hit).
+if [ -f "$CA" ] && command -v node >/dev/null 2>&1; then
+  if ! node "$CA" secret-scan --staged --exit-code; then
+    echo "pre-commit: staged secret detected (above). Remove & rotate it, use env/secret-manager," >&2
+    echo "           or annotate the line with '# ca:allow-secret' if it is a false positive." >&2
+    rc=1
+  fi
+fi
+
+# 2. Protected-branch guard (warn; block only under CA_GIT_GUARD_STRICT=1).
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+case "$branch" in
+  main|master|develop)
+    echo "pre-commit: committing to protected branch '$branch' — prefer a feature branch." >&2
+    [ "$CA_GIT_GUARD_STRICT" = "1" ] && rc=1
+    ;;
+esac
+
+exit $rc
