@@ -52,6 +52,18 @@ test("promoteFact -> listFacts round-trips type and session (H2 regression)", ()
   }
 });
 
+test("fm(parseFrontmatter(x)) round-trips a nested metadata map (no [object Object])", () => {
+  const src = "---\nname: x\nmetadata:\n  type: decision\n  originSessionId: abc\ntags:\n  - a\n---\nbody\n";
+  const { meta, body } = md.parseFrontmatter(src);
+  const rendered = md.fm(meta) + body;
+  assert.match(rendered, /metadata:\n  type: decision\n  originSessionId: abc/, "nested map preserved on write");
+  assert.doesNotMatch(rendered, /\[object Object\]/, "object value not stringified");
+  // Second round-trip is stable.
+  const again = md.parseFrontmatter(rendered);
+  assert.deepEqual(again.meta.metadata, { type: "decision", originSessionId: "abc" });
+  assert.deepEqual(again.meta.tags, ["a"]);
+});
+
 test("updateFrontmatter updates a valid note in place (single block)", () => {
   const dir = tmp();
   const file = path.join(dir, "note.md");
