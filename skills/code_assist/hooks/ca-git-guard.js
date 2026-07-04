@@ -14,6 +14,7 @@ if (process.env.CA_DISABLE === "1") process.exit(0);
 
 const fs = require("node:fs");
 const cp = require("node:child_process");
+const path = require("node:path");
 
 const STRICT = process.env.CA_GIT_GUARD_STRICT === "1";
 
@@ -35,6 +36,11 @@ function main() {
       warnings.push(`commit targets protected branch '${branch}'. Create a feature branch first ` +
         `(git switch -c <type>/<slug>) — see _shared/conventions.md.`);
     }
+    // Secret scan of staged content (deterministic; the same detectors as `secure`).
+    for (const s of stagedSecrets(cwd)) {
+      warnings.push(`possible secret staged — ${s.rule} at ${s.file}:${s.line} (${s.masked}). ` +
+        `Remove it, use env/secret-manager, or annotate with \`# ca:allow-secret\` if a false positive.`);
+    }
   }
 
   if (/\bgit\s+add\s+(?:-A\b|--all\b|\.(?:\s|$))/.test(cmd)) {
@@ -52,6 +58,15 @@ function main() {
   const note = [`code_assist git-guard ${label}:`, ...warnings.map((w) => "  - " + w)].join("\n");
   process.stderr.write(note + "\n");
   process.exit(STRICT ? 2 : 0);
+}
+
+function stagedSecrets(cwd) {
+  try {
+    const tools = require(path.join(__dirname, "..", "bin", "ca-tools.js"));
+    if (!tools || typeof tools.secretScan !== "function") return [];
+    const r = tools.secretScan(["--staged", "--dir", cwd]);
+    return (r && r.findings) ? r.findings.slice(0, 5) : [];
+  } catch { return []; }
 }
 
 function currentBranch(cwd) {
