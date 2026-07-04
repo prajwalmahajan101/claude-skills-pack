@@ -44,3 +44,5 @@ the plan (scaffold/`git mv`) stays in the main session, after confirmation.
 ## Grounding
 `node bin/ca-tools.js structure-audit [dir]` and `structure-scaffold <dir> [--lang L] [--apply]`
 do the exact detection and file creation. The LLM decides which fixes are safe.
+
+> **Bridge:** `structure scaffold` honors `unabridged` (real files, no placeholders) when it is installed. See `bridge/ROUTER.md`.

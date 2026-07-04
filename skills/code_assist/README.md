@@ -21,7 +21,7 @@ truth).
 | **github / track / notify / scan** | gh PRs/CI, Jira, Slack/Telegram, SonarQube/Semgrep. Reads via env tokens; writes dry-run + confirm. | `/code_assist:github` `:track` `:notify` `:scan` |
 | **graph** | Code intelligence - gitnexus (context/impact/detect-changes) + graphify knowledge graph. | `/code_assist:graph` |
 | **onboard / test / refactor / release** | Seed CLAUDE.md+architecture; TDD; safe refactor; cut a release. | `/code_assist:onboard` `:test` `:refactor` `:release` |
-| **domains** | Condensed backend/frontend/data/animation-3d/tui playbooks (self-contained). | `/code_assist:domains` |
+| **domains** | Condensed self-contained playbooks (backend, frontend, data, api-design, microservices, security, testing, devops, animation-3d/web3d, tui) + a `SKILL-INDEX` mapping every installed skill to a playbook/route/bridge. | `/code_assist:domains` |
 | **flow** | Cross-family orchestrator: `ship`, `start`, `fix`, `land`. | `/code_assist:flow` |
 
 ## Architecture
@@ -33,8 +33,12 @@ code_assist/
 ├── _shared/{discipline,conventions,state}.md   # Iron Laws, commit rules, per-repo state
 ├── orchestrator/ROUTER.md       # cross-family flows
 ├── <family>/ROUTER.md + variants + templates
-├── domains/                     # condensed self-contained domain playbooks
-├── agents/                      # subagents
+├── domains/{ROUTER,SKILL-INDEX}.md + playbooks  # condensed, self-contained
+├── agents/                      # subagents (ca-planner/debugger/verifier/structure-auditor + workers)
+├── hooks/                       # ca-session-start + ca-git-guard (+ hooks.json)
+├── bridge/ROUTER.md             # optional sb / unabridged handoffs
+├── tests/                       # ca-tools.test.js, structural-eval.js, eval/ (LLM-graded)
+├── .claude-plugin/plugin.json   # plugin manifest
 └── commands/                    # thin multi-level slash commands
 ```
 
@@ -54,10 +58,34 @@ code_assist/
 ## Install
 
 ```bash
-./install.sh          # symlinks skill + agents + commands into ~/.claude (idempotent)
+./install.sh          # symlinks skill + agents + commands, merges hooks into ~/.claude (idempotent)
 ```
 
 Override target via `CLAUDE_DIR=/custom/path ./install.sh`. Uninstall: `./uninstall.sh`.
+Or as a plugin: `claude plugin marketplace add <repo>` then
+`/plugin install code_assist@claude-skills-pack`.
+
+## Hooks (deterministic guardrails)
+
+`install.sh` merges two hooks into `settings.json` (both gated by `CA_DISABLE=1`):
+
+- **ca-session-start** (`SessionStart`) - prints `.code_assist/STATE.md` "Now" + the structure
+  compliance score; silent outside a git repo.
+- **ca-git-guard** (`PreToolUse:Bash`) - WARNs on `git commit` to `main`/`master`/`develop`,
+  blanket `git add .`/`-A`, or `--no-verify`; hard-blocks only under `CA_GIT_GUARD_STRICT=1`.
+
+## Tests
+
+```bash
+make test        # node --test unit tests over ca-tools.js (zero-dep, 13 cases)
+make eval        # structural consistency eval — CI-ready, zero API cost
+make eval-llm    # opt-in behavioral evals (claude -p + grader); costs API tokens
+make all         # lint + test + eval
+```
+
+`make eval` asserts commands resolve to families, every family loads the discipline layer,
+manifests are valid JSON, and there is no placeholder leakage. `make eval-llm` checks each family
+resists bait (debug won't guess-fix, commit emits no AI footer, plan won't code before approval).
 
 ## Integrations (optional, env-gated)
 

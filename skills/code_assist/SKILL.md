@@ -62,6 +62,41 @@ Run `node ~/.claude/skills/code_assist/bin/ca-tools.js <cmd>` - output is JSON.
 - "commit then journal" → `commit` → `journal` (references new SHAs).
 - "ticket to PR" / "ship it" → `/code_assist:flow ship` (or `start`).
 
+## Agents (context-budgeted subagents)
+Delegate heavy work to a subagent (each ROUTER has an "Execution Mode - Agent Dispatch" section;
+inline stays the default for small repos):
+- `ca-planner` - brainstorm → write a plan to `.code_assist/.plan/`.
+- `ca-debugger` - scientific-method DEBUG.md session (no fix without a reproduced root cause).
+- `ca-verifier` - goal-backward, evidence-based verification.
+- `ca-structure-auditor` - structure audit + scaffold plan.
+- plus `architectural-reviewer`, `commit-planner`, `journal-writer` (family workers).
+
+## Hooks (deterministic guardrails)
+Registered into `settings.json` by `install.sh` (both gated by `CA_DISABLE=1`):
+- `ca-session-start` (SessionStart) - prints `.code_assist/STATE.md` "Now" + structure score;
+  silent outside a git repo.
+- `ca-git-guard` (PreToolUse:Bash) - WARNs on `git commit` to main/master, blanket `git add .`/`-A`,
+  or `--no-verify`; hard-blocks only under `CA_GIT_GUARD_STRICT=1`.
+
+## Tests (self-verifying, not just prompt-ware)
+- `make test` - `node --test` unit tests over `ca-tools.js` (stack-detect, structure audit/scaffold,
+  diff classify, md-format, dry-run gating, changelog/version-detect).
+- `make eval` - zero-cost structural eval (commands→family resolve, discipline loaded, no placeholder
+  leakage, manifests valid). CI-ready, exits non-zero on any failure.
+- `make eval-llm` - opt-in, token-costing behavioral evals (`claude -p` + `tests/eval/grader.md`):
+  asserts each family resists bait (debug won't guess-fix, commit emits no AI footer, plan won't code
+  before approval).
+
+## Bridge (optional sibling cooperation) - `bridge/ROUTER.md`
+When the pack's other skills are installed: journal/adr/review/verify artifacts hand off to **sb**
+(`/sb:sync-project`, `/sb:lesson`); full-output families (`plan execute`, `onboard`,
+`structure scaffold`) honor **unabridged**. All optional - `ca-tools bridge status` detects siblings.
+
+## Plugin usage
+This skill is also a plugin in the repo-root `claude-skills-pack` marketplace:
+`claude plugin marketplace add <repo>` then `/plugin install code_assist@claude-skills-pack`
+(or run `install.sh` for the symlink install). `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}`.
+
 ## Sub-skill tree
 ```
 code_assist/
@@ -73,7 +108,12 @@ code_assist/
 ├── plan/{ROUTER,shared,brainstorm,write,execute}.md
 ├── debug/{ROUTER,shared,investigate,resume}.md
 ├── adr/{ROUTER,shared,new,supersede,index}.md
-├── verify/ROUTER.md
-├── agents/*.md              # subagents
+├── verify/ROUTER.md  structure/  release/  onboard/  refactor/  test/
+├── github/  track/  notify/  scan/  graph/  format/  domains/
+├── agents/*.md              # subagents (ca-planner/debugger/verifier/structure-auditor + workers)
+├── hooks/{hooks.json,ca-session-start.js,ca-git-guard.js}
+├── bridge/ROUTER.md         # optional sb/unabridged handoffs
+├── tests/{ca-tools.test.js,structural-eval.js,eval/*}
+├── .claude-plugin/plugin.json
 └── commands/*.md            # thin multi-level slash commands
 ```

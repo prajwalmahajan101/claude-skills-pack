@@ -28,3 +28,5 @@ Goal: make an unfamiliar (or under-documented) repo legible - produce `CLAUDE.md
 - Ground every claim in the code (cite `path:line`). Do not invent architecture.
 - Never overwrite an existing CLAUDE.md/README without asking; prefer augmenting.
 - Chains from `structure scaffold` (seed the stubs, then fill them here).
+
+> **Bridge:** the generated `CLAUDE.md` honors `unabridged` (complete, not a skeleton) when it is installed. See `bridge/ROUTER.md`.

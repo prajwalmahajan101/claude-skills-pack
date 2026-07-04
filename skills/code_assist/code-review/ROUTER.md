@@ -13,8 +13,8 @@ Pick the right variant(s) and load them. Do not duplicate review logic here.
 Before scoring, when configured, gather deterministic signal to fold into Step 3's detection
 checklist (treat security findings as blocking, style as informational):
 
-- `node bin/ca-tools.js scan sonar` — SonarQube open issues (needs `SONAR_*` env; no-op otherwise).
-- `node bin/ca-tools.js graph detect-changes` / `graph impact <symbol>` — map the diff to
+- `node bin/ca-tools.js scan sonar` - SonarQube open issues (needs `SONAR_*` env; no-op otherwise).
+- `node bin/ca-tools.js graph detect-changes` / `graph impact <symbol>` - map the diff to
   affected symbols/flows and size blast radius (needs gitnexus; skip if absent).
 
 These are inputs, not a replacement for the architectural review.
@@ -45,11 +45,11 @@ Read and execute `/home/prjawal/.claude/skills/code_assist/code-review/detect.md
 
 ## Step 3: Execute
 
-Follow `shared.md` Steps 1–6 using the weight table from the loaded variant file. Anti-patterns from the variant are added to Step 3's detection checklist.
+Follow `shared.md` Steps 1-6 using the weight table from the loaded variant file. Anti-patterns from the variant are added to Step 3's detection checklist.
 
-## Execution Mode — Agent Dispatch
+## Execution Mode - Agent Dispatch
 
-Full reviews (single or fullstack) are delegated to the **`architectural-reviewer` subagent** to keep main-context clean and enable parallelism. Targeted reviews and `detect.md` continue to run inline — no agent needed for those.
+Full reviews (single or fullstack) are delegated to the **`architectural-reviewer` subagent** to keep main-context clean and enable parallelism. Targeted reviews and `detect.md` continue to run inline - no agent needed for those.
 
 ### Single-stack full review
 
@@ -70,9 +70,9 @@ Full reviews (single or fullstack) are delegated to the **`architectural-reviewe
 
 ### When to skip the agent
 
-- **Targeted review** (Step 0 shortcut) — run `shared.md`'s targeted-review path inline. The diff is small; agent overhead isn't worth it.
-- **Stack detection** (`detect.md`) — run inline. Returns one token.
-- **Per-variant slash commands** (`/code_assist:code_review_backend`, `_frontend`, `_tui`) — these are user-explicit shortcuts; you may still delegate to the agent, but inline is fine for small repos.
+- **Targeted review** (Step 0 shortcut) - run `shared.md`'s targeted-review path inline. The diff is small; agent overhead isn't worth it.
+- **Stack detection** (`detect.md`) - run inline. Returns one token.
+- **Per-variant slash commands** (`/code_assist:code_review_backend`, `_frontend`, `_tui`) - these are user-explicit shortcuts; you may still delegate to the agent, but inline is fine for small repos.
 
 ---
 
@@ -97,3 +97,5 @@ _Last reviewed: YYYY-MM-DD_
 ```
 
 Single-stack repos keep the flat `.code_review/*.md` layout (no nesting) for backwards compatibility.
+
+> **Bridge:** when `sb` is installed, run `/sb:sync-project` after a review so its `.code_review/` state syncs to the vault. See `bridge/ROUTER.md`.
