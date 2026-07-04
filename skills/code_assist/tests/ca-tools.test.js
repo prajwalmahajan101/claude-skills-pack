@@ -246,6 +246,24 @@ test("installGitHooks is dry-run by default, applies + sets hooksPath, and is id
   assert.equal(git(d, "config", "--get", "core.hooksPath").stdout.trim(), "", "hooksPath reverted");
 });
 
+test("incidentScaffold numbers sequentially from the release tag, idempotent-safe", () => {
+  const d = initRepo();
+  git(d, "commit", "-q", "--allow-empty", "-m", "init");
+  git(d, "tag", "v2.0.0");
+  const dry = ca.incidentScaffold(["--title", "checkout 500s", "--dir", d]);
+  assert.equal(dry.number, "0001");
+  assert.equal(dry.base_tag, "v2.0.0", "reports the release tag as hotfix base");
+  assert.equal(dry.written, false, "dry-run by default");
+  const w1 = ca.incidentScaffold(["--title", "checkout 500s", "--dir", d, "--apply"]);
+  assert.ok(w1.written && fs.existsSync(path.join(d, w1.file)));
+  const w2 = ca.incidentScaffold(["--title", "cache stampede", "--dir", d, "--apply"]);
+  assert.equal(w2.number, "0002", "next incident increments");
+  // re-scaffolding the SAME title/number must not clobber an existing file
+  const dup = ca.incidentScaffold(["--title", "checkout 500s", "--dir", d, "--apply"]);
+  assert.equal(w2.number, "0002");
+  assert.ok(dup.number === "0003" || dup.ok === false, "never silently overwrites an existing incident");
+});
+
 test("envCheck reports missing + extra keys, never values", () => {
   const d = tmp();
   fs.writeFileSync(path.join(d, ".env.example"), "DB_URL=\nAPI_KEY=\nPORT=\n");
