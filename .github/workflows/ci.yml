@@ -73,7 +73,7 @@ jobs:
                 sutra)       pat="$pat|\bsutra-tools\.js\b" ;;
               esac
               hits=$(grep -RnE "$pat" "skills/$m" \
-                       --include='*.js' --include='*.md' --include='*.json' \
+                       --include='*.js' --include='*.md' --include='*.json' --include='*.sh' \
                        --exclude-dir=tests 2>/dev/null || true)
               if [ -n "$hits" ]; then
                 echo "VIOLATION: member '$m' couples to '$s':"
