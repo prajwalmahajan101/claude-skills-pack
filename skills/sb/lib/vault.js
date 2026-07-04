@@ -212,7 +212,11 @@ function readJSON(file, fallback) {
 
 function writeJSON(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+  // Atomic write: a concurrent reader/writer never sees a torn file. Same-dir
+  // temp so the rename stays on one filesystem.
+  const tmpFile = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2) + "\n");
+  fs.renameSync(tmpFile, file);
 }
 
 function readSessionMap() {
@@ -223,6 +227,38 @@ function writeSessionMap(map) {
   writeJSON(paths("_").sessionMap, map);
 }
 
+function sleepMs(ms) {
+  // Zero-dep synchronous sleep (hooks are short-lived; used only for lock backoff).
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {}
+}
+
+// Serialize read-modify-write of the shared session-map across concurrent hooks
+// (Stop / session-end / capture can fire at once). Acquires an exclusive lockfile,
+// re-reads the map, applies `mutator(map)`, and atomically writes it back. A stale
+// lock (crashed holder) is reclaimed after 10s; if the lock can't be taken it
+// proceeds best-effort unlocked (degrades to prior behavior, never deadlocks).
+function updateSessionMap(mutator) {
+  const lockPath = paths("_").sessionMap + ".lock";
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  let fd = null;
+  for (let i = 0; i < 50; i++) {
+    try { fd = fs.openSync(lockPath, "wx"); break; }
+    catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 10000) fs.unlinkSync(lockPath); } catch {}
+      sleepMs(20);
+    }
+  }
+  try {
+    const map = readSessionMap();
+    const r = mutator(map);
+    writeSessionMap(map);
+    return r;
+  } finally {
+    if (fd !== null) { try { fs.closeSync(fd); } catch {} try { fs.unlinkSync(lockPath); } catch {} }
+  }
+}
+
 function exists(p) {
   try { fs.accessSync(p); return true; } catch { return false; }
 }
@@ -230,21 +266,25 @@ function exists(p) {
 // Mark a session as ended in both session-map and the conversation file frontmatter.
 // reason: "clean-exit" | "cleared" | "crashed" | "in-progress"
 function markSessionEnded(sessionId, reason, endedAt = new Date().toISOString(), extra = {}) {
-  const { updateFrontmatter, parseFrontmatter } = require("./markdown.js");
-  const map = readSessionMap();
-  const entry = map[sessionId];
-  if (!entry) return false;
-
-  // Don't overwrite a terminal state with in-progress
-  if (reason === "in-progress" && entry.status === "ended") return false;
-
-  entry.status = reason === "in-progress" ? "active" : "ended";
-  entry.endedAt = reason === "in-progress" ? null : endedAt;
-  entry.endedReason = reason;
-  if (extra.clearedTo) entry.clearedTo = extra.clearedTo;
-  if (extra.clearedFrom) entry.clearedFrom = extra.clearedFrom;
-  map[sessionId] = entry;
-  writeSessionMap(map);
+  const { updateFrontmatter } = require("./markdown.js");
+  // Read-modify-write the shared map under a lock so a concurrent capture hook's
+  // byteOffset/turnCount update is not clobbered (and vice-versa).
+  let entry = null;
+  const changed = updateSessionMap((map) => {
+    const e = map[sessionId];
+    if (!e) return false;
+    // Don't overwrite a terminal state with in-progress
+    if (reason === "in-progress" && e.status === "ended") return false;
+    e.status = reason === "in-progress" ? "active" : "ended";
+    e.endedAt = reason === "in-progress" ? null : endedAt;
+    e.endedReason = reason;
+    if (extra.clearedTo) e.clearedTo = extra.clearedTo;
+    if (extra.clearedFrom) e.clearedFrom = extra.clearedFrom;
+    map[sessionId] = e;
+    entry = e;
+    return true;
+  });
+  if (!changed) return false;
 
   if (entry.file && fs.existsSync(entry.file)) {
     const updates = { ended_reason: reason };
@@ -261,7 +301,7 @@ module.exports = {
   DIR, TYPE_MAP, EXCLUDE_FOLDERS, folderToType,
   expandHome, slugify, projectSlugFromCwd,
   paths, ensureDirs,
-  readJSON, writeJSON, readSessionMap, writeSessionMap,
+  readJSON, writeJSON, readSessionMap, writeSessionMap, updateSessionMap,
   exists,
   markSessionEnded,
 };
