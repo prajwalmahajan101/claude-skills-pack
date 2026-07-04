@@ -10,6 +10,8 @@ const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { ensureDirs, projectSlugFromCwd, readSessionMap, writeSessionMap, paths } = require(path.join(SKILL_LIB, "vault.js"));
 const { readEvents, toTurns } = require(path.join(SKILL_LIB, "jsonl.js"));
 const { fm, renderTurns, writeConversation } = require(path.join(SKILL_LIB, "markdown.js"));
+const { isSelfCapture, deriveTitle, noteFileName, wireLinks } = require(path.join(SKILL_LIB, "import-helpers.js"));
+const { suggest } = require(path.join(SKILL_LIB, "connector.js"));
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
@@ -40,16 +42,21 @@ for (const projDir of fs.readdirSync(root)) {
 
     const { events, size } = readEvents(jsonl, 0);
     const { metadata, turns } = toTurns(events);
-    if (turns.length === 0) { skipped++; continue; }
+    // Skip init-only / empty sessions (matches /sb:clean's turn_count<2 policy).
+    if (turns.length < 2) { skipped++; continue; }
 
-    if (dryRun) { console.log(`DRY would import ${sid.slice(0,8)} (${turns.length} turns) → ${slug}`); imported++; continue; }
+    // Never capture sb's own headless `claude -p` sub-invocations.
+    if (isSelfCapture(turns, cwd)) { skipped++; continue; }
+
+    const title = deriveTitle(turns, metadata.title);
+
+    if (dryRun) { console.log(`DRY would import ${sid.slice(0,8)} (${turns.length} turns) → ${slug} :: ${noteFileName(sid, metadata.startedAt, st.birthtimeMs)}`); imported++; continue; }
 
     const p = ensureDirs(slug);
-    const titleSlug = metadata.title ? metadata.title.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,50) : "untitled";
-    const file = path.join(p.conversations, `${sid}__${titleSlug}.md`);
+    const file = path.join(p.conversations, noteFileName(sid, metadata.startedAt, st.birthtimeMs));
     const front = {
       session_id: sid,
-      title: metadata.title || "(untitled session)",
+      title,
       project: slug,
       project_path: cwd,
       model: metadata.model || "",
@@ -67,6 +74,11 @@ for (const projDir of fs.readdirSync(root)) {
       backfilled: true,
     };
     writeConversation(file, front, `# ${front.title}\n\n` + renderTurns(turns, 1));
+
+    // Linkage: auto-tag, register under the project INDEX, append top-3 Related.
+    const related = suggest(file, 3).map((r) => path.basename(r.note.file, ".md"));
+    wireLinks({ noteFile: file, projectIndexPath: paths(slug).projectIndex, relatedBasenames: related });
+
     map[sid] = {
       file, project: slug, byteOffset: size,
       turnCount: turns.length, lastWriteAt: new Date().toISOString(),
