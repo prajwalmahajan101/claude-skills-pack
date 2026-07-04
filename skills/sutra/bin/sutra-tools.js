@@ -368,9 +368,11 @@ function recallFused(args) {
   return { context, sources, warnings, lessons: clip(strip(merged)), risks: clip(risks), memory: clip(memory) };
 }
 
-// Human-readable reason a member subprocess failed (spawn error / timeout / exit).
+// Human-readable reason a member subprocess failed. A spawn error and a timeout
+// both leave status===null, so discriminate on the error code (ETIMEDOUT) rather
+// than status.
 function spawnWhy(r) {
-  if (r.error) return r.status === null ? "timeout" : (r.error.code || "spawn-error");
+  if (r.error) return r.error.code === "ETIMEDOUT" ? "timeout" : (r.error.code || "spawn-error");
   return `exit ${r.status}`;
 }
 
