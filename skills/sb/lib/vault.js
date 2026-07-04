@@ -25,10 +25,21 @@ function slugify(s) {
 // Phase 8a.3: basename-first slugging with alias file + dirname-hash collision suffix.
 // Old behavior (full path joined by `-`) produced ugly long slugs and round-tripped badly
 // from Claude Code's sanitized JSONL dir names. New behavior: short, stable, human-readable.
+// Basenames that are never a real project — captured cwds that landed in a
+// scratch/system dir. These route to the `_unsorted` catch-all scope instead
+// of polluting the top level with meaningless folder names.
+const NON_PROJECT_BASENAMES = new Set([
+  "tmp", "temp", "downloads", "node_modules", "dist", "build",
+]);
+
+// Absolute prefixes that always mean "not a project" (scratch/temp roots).
+const NON_PROJECT_PREFIXES = ["/tmp", "/var/tmp", os.tmpdir()];
+
 function projectSlugFromCwd(cwd) {
   if (!cwd) return "_no-cwd";
 
-  // 1. Alias file lookup (absolute path → user-chosen slug).
+  // 1. Alias file lookup (absolute path → user-chosen slug). Highest priority so
+  //    an explicit alias can override the non-project routing below.
   const aliasFile = path.join(VAULT, "_meta", "project-aliases.json");
   if (fs.existsSync(aliasFile)) {
     try {
@@ -37,12 +48,22 @@ function projectSlugFromCwd(cwd) {
     } catch {}
   }
 
-  // 2. Home dir special case.
+  // 2. Home dir special case (real work is regularly done from ~).
   const home = os.homedir();
   if (cwd === home) return "home";
 
-  // 3. Basename of cwd, with 4-char dirname hash suffix to disambiguate collisions.
+  // 3. Non-project routing — scratch/system dirs and dotfolders become `_unsorted`
+  //    rather than a junk scope like `tmp`, `.claude`, or `downloads`.
   const base = path.basename(cwd);
+  const norm = cwd.replace(/\/+$/, "");
+  const inScratch = NON_PROJECT_PREFIXES.some(
+    (pre) => pre && (norm === pre || norm.startsWith(pre + "/"))
+  );
+  if (inScratch || NON_PROJECT_BASENAMES.has(base) || base.startsWith(".")) {
+    return "_unsorted";
+  }
+
+  // 4. Basename of cwd, with 4-char dirname hash suffix to disambiguate collisions.
   if (!base) return "_root";
   const hash = shortHash(path.dirname(cwd));
   const candidate = slugify(base);
