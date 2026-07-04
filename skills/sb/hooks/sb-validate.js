@@ -23,7 +23,11 @@ function main() {
   const file = hook?.tool_input?.file_path || hook?.args?.file_path || "";
   if (!file || !file.endsWith(".md") || !fs.existsSync(file)) return;
 
-  const SKILL_LIB = path.join(__dirname, "..", "lib");
+  // In-repo sibling (tests) or the installed skill dir (~/.claude/hooks → ../lib is
+  // wrong; fall back to the installed skill's lib).
+  const SKILL_LIB = fs.existsSync(path.join(__dirname, "..", "lib", "vault.js"))
+    ? path.join(__dirname, "..", "lib")
+    : path.join(require("node:os").homedir(), ".claude", "skills", "sb", "lib");
   let VAULT, validateNote;
   try {
     ({ VAULT } = require(path.join(SKILL_LIB, "vault.js")));

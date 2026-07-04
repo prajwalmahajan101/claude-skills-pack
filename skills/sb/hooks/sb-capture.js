@@ -9,7 +9,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 
-const SKILL_LIB = path.join(__dirname, "..", "lib");
+// Resolve lib from the in-repo sibling (tests) or the installed skill dir. When this
+// hook runs from ~/.claude/hooks, __dirname/../lib is ~/.claude/lib (wrong) — fall back
+// to the installed skill's lib so the hook works after install.sh copies it there.
+const SKILL_LIB = fs.existsSync(path.join(__dirname, "..", "lib", "vault.js"))
+  ? path.join(__dirname, "..", "lib")
+  : path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { ensureDirs, projectSlugFromCwd, readSessionMap, updateSessionMap, paths, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 const { sessionFilePath, readEvents, toTurns } = require(path.join(SKILL_LIB, "jsonl.js"));
 const { fm, renderTurns, parseFrontmatter, writeConversation, updateFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
