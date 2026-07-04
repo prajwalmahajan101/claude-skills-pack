@@ -42,7 +42,7 @@ Persistent second brain for Claude Code, backed by the `ai-mind` Obsidian vault.
 | `/sb:consolidate [--apply]` | Dedupe lessons, archive stale convos, promote durable→memory, import global lessons (dry-run unless `--apply`) |
 | `/sb:health [--json]` | Read-only vault audit (orphans, duplicates, stale tasks, malformed frontmatter) |
 | `/sb:bases` | (Re)generate Obsidian Bases views into `00_Dashboard/` |
-| `/sb:sync-project [--all\|--repo <p>]` | Mirror a repo's `.journal/` + `.code_review/` into `02_Projects/<slug>/{journal,reviews}` + surface open issues |
+| `/sb:ingest [--payload <f>]` | Write a supplied JSON note payload into `02_Projects/<slug>/` (generic; the sutra orchestrator feeds it parsed repo artifacts) |
 | `/sb:decision "<title>" [--from-council]` | Capture an ADR (Context/Decision/Consequences/Usage) into `02_Projects/<slug>/decisions` + global `11_Decisions` |
 | `/sb:lessons-import [--push]` | Import `~/.claude/lessons` into the vault; `--push` writes sb lessons back to the global INDEX |
 | `/sb:graph [--project <slug>]` | Build a knowledge graph via graphify + mirror `graphify-out/` into `09_Exports/graph` |
@@ -132,11 +132,11 @@ Note: facts that change over time (a person's `role`/`company`/`relationship`, a
 - `lib/embeddings.js` — key-free semantic layer over smart-connections precomputed vectors (cosine/nearest/anchor)
 - `lib/memory-bridge.js` — promote/list/mirror harness file-memory facts
 - `lib/remember-bridge.js` — append/read the `~/.remember` rolling history
-- `lib/repo-artifacts.js` — read a repo's `.journal/` + `.code_review/` (issues parsing)
+- `lib/git.js` — tiny generic git repo-root helper
 - `lib/lessons-bridge.js` — import/list/push the global `~/.claude/lessons` store
 - `commands/_runners/{consolidate,health,bases,init,emerge,eval}.js` — self-maintenance, Bases, entry docs, synthesis, retrieval eval
 - `commands/_runners/{distill,related,idea,graduate}.js` — provenance distillation, semantic neighbors, idea lifecycle
-- `commands/_runners/{sync-project,decision,lessons-import,graph}.js` — external-skill integrations
+- `commands/_runners/{ingest,decision,lessons-import,graph}.js` — vault-ingest + supporting runners
 - `hooks/sb-capture.js` — Stop/SubagentStop/**PreCompact**, writes conversation file (`type: conversation`)
 - `hooks/sb-plan-mirror.js` — PostToolUse, mirrors plans
 - `hooks/sb-validate.js` — PostToolUse (Write/Edit), non-blocking AI-first validator
