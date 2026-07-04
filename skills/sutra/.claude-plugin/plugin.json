@@ -1,0 +1,11 @@
+{
+  "name": "sutra",
+  "description": "Orchestrator for claude-skills-pack — unifies code_assist, sb, and unabridged behind one bridged command surface. Owns the capability registry, the artifact interchange schema, the cross-plugin recall fusion, and the verify→lesson→recall feedback loop. Members stay fully standalone; sutra makes them cooperate. Backed by a zero-dep Node CLI, deterministic self-tests, and a session hook.",
+  "version": "0.1.0",
+  "author": { "name": "Prajwal Mahajan" },
+  "keywords": [
+    "orchestrator", "bridge", "registry", "feedback-loop", "workflow",
+    "memory", "recall", "composition", "second-brain", "code-review"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

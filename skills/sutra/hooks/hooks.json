@@ -1,0 +1,16 @@
+{
+  "_comment": "Plugin-format hooks for sutra. Claude Code resolves ${CLAUDE_PLUGIN_ROOT} to this skill's root when loaded as a plugin. The SessionStart hook prints the active pack members (and, from Phase 6, up to 2 repo-scoped risks via fused recall). Honors SUTRA_DISABLE=1.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/sutra-session-start.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
