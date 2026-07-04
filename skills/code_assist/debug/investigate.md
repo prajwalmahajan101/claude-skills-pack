@@ -8,6 +8,11 @@ type: skill
 
 Follow `shared.md`'s loop. Open (or overwrite) `.code_assist/.debug/DEBUG.md`.
 
+## Prior knowledge (from memory)
+`node bin/ca-tools.js recall --context "<the symptom / error / component>" --limit 5` - a past
+root-cause or a risk `ref` for this area often points straight at the mechanism. Treat it as a
+lead to test, never as the answer (the Iron Law still holds: no fix without a reproduced cause).
+
 ## Steps (one todo each)
 1. **Capture the symptom** - exact error/output, and the conditions under which it appears.
 2. **Reproduce** it reliably; write the reproduction into DEBUG.md. If you cannot reproduce,

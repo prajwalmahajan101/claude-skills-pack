@@ -25,6 +25,7 @@
  *   version-detect [dir]          find the version source + current value
  *   onboard-scan [dir]            stack + structure + entry-point orientation blob
  *   selfcheck                     which tools/integrations/siblings are configured
+ *   recall --context "<text>"     pull relevant prior lessons/memory/risks (provenance)
  *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
@@ -403,13 +404,159 @@ function selfcheck() {
 }
 
 // ---------------------------------------------------------------------------
-// bridge — detect sibling skills + describe handoffs
+// recall — reverse bridge: pull relevant prior lessons / memory / risks so the
+// LLM reasons WITH accumulated knowledge. Self-contained (reads the three raw
+// stores directly); enriches with sb's semantic retriever when sb is present.
+// Every item carries a file:line `ref` (provenance) — nothing is invented.
+// ---------------------------------------------------------------------------
+const RISK_TAGS = /\b(risk|gotcha|pitfall|footgun|regression|caution|danger|breaking|security|antipattern|anti-pattern)\b/i;
+const RISK_PHRASE = /\b(never|don'?t|do not|avoid|must not|beware|careful|fails? (?:closed|open)|breaks?)\b/i;
+const STOPWORDS = new Set(("the a an and or of to in on for with is are be this that it at by from as into your my our " +
+  "not no do does how why what when where which who then than into via per use used using add adds get set new").split(" "));
+
+function homeDir(sub) { return path.join(os.homedir(), sub); }
+function lessonsDir() { return process.env.CA_LESSONS_DIR || homeDir(".claude/lessons"); }
+function rememberDir() { return process.env.CA_REMEMBER_DIR || homeDir(".remember"); }
+function memoryDirFor(dir) {
+  if (process.env.CA_MEMORY_DIR) return process.env.CA_MEMORY_DIR;
+  // Harness memory is keyed by the project root; prefer the git top-level, else the dir.
+  const top = sh("git", ["-C", dir || ".", "rev-parse", "--show-toplevel"]);
+  const abs = top.status === 0 && top.stdout ? top.stdout : path.resolve(dir || ".");
+  const slug = abs.replace(/[/_.]/g, "-");
+  return path.join(os.homedir(), ".claude", "projects", slug, "memory");
+}
+
+function tokenize(s) {
+  return (s || "").toLowerCase().split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+}
+function overlapScore(ctxToks, text, tag) {
+  const cand = [...new Set(tokenize(text + " " + (tag || "")))];
+  let s = 0;
+  for (const c of ctxToks) {
+    for (const t of cand) {
+      // exact, or shared >=4-char prefix (cheap stemming: commit~committing, secret~secrets).
+      if (c === t) { s += 2; break; }
+      if (c.length >= 4 && t.length >= 4 && (c.startsWith(t.slice(0, 4)) && t.startsWith(c.slice(0, 4)))) { s += 1; break; }
+    }
+  }
+  return s;
+}
+
+// Read `- \`slug.md\` — [tag] summary` lines from the lessons INDEX (cheap, no per-file open).
+function readLessons() {
+  const dir = lessonsDir();
+  const idx = path.join(dir, "INDEX.md");
+  const out = [];
+  let body;
+  try { body = fs.readFileSync(idx, "utf8"); } catch { return out; }
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^-\s+`([^`]+)`\s*[—-]+\s*(?:\[([^\]]+)\]\s*)?(.+)$/);
+    if (!m) continue;
+    out.push({ text: m[3].trim(), tag: (m[2] || "").trim(), file: path.join(dir, m[1]), ref: `${idx}:${i + 1}` });
+  }
+  return out;
+}
+
+// Read `- [Title](file.md) — hook` lines from the project's harness MEMORY.md.
+function readMemory(dir) {
+  const mdir = memoryDirFor(dir);
+  const idx = path.join(mdir, "MEMORY.md");
+  const out = [];
+  let body;
+  try { body = fs.readFileSync(idx, "utf8"); } catch { return out; }
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^-\s+\[([^\]]+)\]\(([^)]+)\)\s*[—-]+\s*(.+)$/);
+    if (!m) continue;
+    out.push({ text: `${m[1]} — ${m[3].trim()}`, tag: "", file: path.join(mdir, m[2]), ref: `${idx}:${i + 1}` });
+  }
+  return out;
+}
+
+function readRemember() {
+  const p = path.join(rememberDir(), "recent.md");
+  const out = [];
+  let body;
+  try { body = fs.readFileSync(p, "utf8"); } catch { return out; }
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/^[-*]\s*/, "").trim();
+    if (line && !line.startsWith("#") && !line.startsWith("```")) {
+      out.push({ text: line.slice(0, 200), tag: "", file: p, ref: `${p}:${i + 1}` });
+    }
+  }
+  return out;
+}
+
+// Best-effort sb enrichment: verbatim highlights with provenance. Never throws.
+function sbHighlights(context, limit) {
+  const runner = path.join(os.homedir(), ".claude", "skills", "sb", "commands", "_runners", "ask-highlights.js");
+  if (!fs.existsSync(runner)) return [];
+  const r = sh("node", [runner, context, "--limit", String(limit)], { timeout: 8000 });
+  if (r.status !== 0 || !r.stdout) return [];
+  const out = [];
+  const lines = r.stdout.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].match(/^•\s*(.+)$/);
+    if (!t) continue;
+    const ref = (lines[i + 1] || "").match(/—\s*(.+:\d+)\s*$/);
+    out.push({ text: t[1].trim(), tag: "", source: "sb", ref: ref ? ref[1] : "sb:vault" });
+  }
+  return out;
+}
+
+function isRisk(item) { return RISK_TAGS.test(item.tag) || RISK_TAGS.test(item.text) || RISK_PHRASE.test(item.text); }
+
+function recall(args) {
+  const f = flags(args);
+  const context = f.context || f._.join(" ") || "";
+  const limit = Number(f.limit || 5);
+  const kinds = String(f.kinds || "lessons,risks,memory").split(",").map((k) => k.trim());
+  const dir = f.dir || ".";
+  const ctxToks = tokenize(context);
+  const rank = (items, src) => items
+    .map((it) => ({ ...it, source: it.source || src, score: context ? overlapScore(ctxToks, it.text, it.tag) : 1 }))
+    .filter((it) => it.score > 0 || !context)
+    .sort((a, b) => b.score - a.score);
+
+  const lessonItems = readLessons();
+  const memoryItems = readMemory(dir);
+  const rememberItems = readRemember();
+
+  let lessons = rank(lessonItems, "lessons");
+  const memory = rank(memoryItems.concat(rememberItems.map((r) => ({ ...r, source: "remember" }))), "memory");
+  // sb enrichment (verbatim, provenance) — merged into lessons, deduped by text.
+  // CA_RECALL_SB=0 disables it (keeps tier-1 fully isolated for deterministic tests).
+  if (context && process.env.CA_RECALL_SB !== "0" && selfcheck().siblings.sb) {
+    const seen = new Set(lessons.map((l) => l.text));
+    for (const h of sbHighlights(context, limit)) if (!seen.has(h.text)) { lessons.push({ ...h, score: 1 }); seen.add(h.text); }
+  }
+  // risks = risk-flagged items from CURATED sources (lessons + memory), never the
+  // noisy remember activity log; deduped, ranked.
+  const riskPool = lessons.concat(memory).filter((it) => it.source !== "remember" && isRisk(it));
+  const risks = riskPool.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  const clip = (arr) => arr.slice(0, limit).map(({ text, tag, source, ref }) => ({ text, tag: tag || undefined, source, ref }));
+  const result = { context, dir: path.resolve(dir), sources: {
+    lessons: lessonItems.length, memory: memoryItems.length, remember: rememberItems.length,
+    sb: selfcheck().siblings.sb } };
+  if (kinds.includes("lessons")) result.lessons = clip(lessons);
+  if (kinds.includes("risks")) result.risks = clip(risks);
+  if (kinds.includes("memory")) result.memory = clip(memory);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// bridge — detect sibling skills + describe handoffs (now bidirectional)
 // ---------------------------------------------------------------------------
 function bridge(args) {
   const f = flags(args);
   const sub = f._[0] || "status";
   const sc = selfcheck();
   if (sub === "status") {
+    const r = recall(["--limit", "0", "--kinds", "lessons"]);
     return {
       siblings: sc.siblings,
       handoffs: {
@@ -417,6 +564,11 @@ function bridge(args) {
           : "sb not installed (optional)",
         unabridged: sc.siblings.unabridged ? "full-output families (plan execute, onboard, scaffold) honor the no-truncation rule"
           : "unabridged not installed (optional)",
+      },
+      pull: {
+        available: (r.sources.lessons + r.sources.memory + r.sources.remember) > 0 || sc.siblings.sb,
+        sources: r.sources,
+        note: "reverse channel: `ca-tools recall --context \"<task>\"` surfaces lessons/memory/risks with provenance",
       },
     };
   }
@@ -646,6 +798,7 @@ async function main() {
     case "version-detect": return out(versionDetect(f._[0] || "."));
     case "onboard-scan": return out(onboardScan(f._[0] || "."));
     case "selfcheck": return out(selfcheck());
+    case "recall": return out(recall(rest));
     case "github": return out(github(rest));
     case "track": return out(await track(rest));
     case "notify": return out(await notify(rest));
@@ -664,6 +817,6 @@ if (require.main === module) {
   module.exports = {
     detectStack, classifyFile, structureAudit, structureScaffold,
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
-    track, notify, bridge, flags,
+    track, notify, bridge, flags, recall,
   };
 }

@@ -87,10 +87,17 @@ Registered into `settings.json` by `install.sh` (both gated by `CA_DISABLE=1`):
   asserts each family resists bait (debug won't guess-fix, commit emits no AI footer, plan won't code
   before approval).
 
-## Bridge (optional sibling cooperation) - `bridge/ROUTER.md`
-When the pack's other skills are installed: journal/adr/review/verify artifacts hand off to **sb**
-(`/sb:sync-project`, `/sb:lesson`); full-output families (`plan execute`, `onboard`,
-`structure scaffold`) honor **unabridged**. All optional - `ca-tools bridge status` detects siblings.
+## Bridge (optional, **bidirectional**) - `bridge/ROUTER.md`
+The pack cooperates **both ways** (all optional; `ca-tools bridge status` shows siblings + `pull`):
+- **Pull-back (memory → responses):** `ca-tools recall --context "<task>"` surfaces relevant prior
+  **lessons / memory / risks** (with file:line provenance) so `plan`/`debug`/`code_review`/`verify`
+  and the session-start hook reason *with* accumulated knowledge. Self-contained (reads
+  `~/.claude/lessons`, harness `MEMORY.md`, `~/.remember` directly); fuses sb's vault when present.
+  Manual pull: `/code_assist:recall`.
+- **Write-out (artifacts → vault):** journal/adr/review/verify artifacts hand off to **sb**
+  (`/sb:sync-project`, `/sb:lesson`) - which then feeds the pull-back next time (closed loop).
+- **Complete output:** full-output families (`plan execute`, `onboard`, `structure scaffold`) honor
+  **unabridged** when installed.
 
 ## Plugin usage
 This skill is also a plugin in the repo-root `claude-skills-pack` marketplace:
