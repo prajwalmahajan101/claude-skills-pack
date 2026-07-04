@@ -300,6 +300,10 @@ function markSessionEnded(sessionId, reason, endedAt = new Date().toISOString(),
   });
   if (!changed) return false;
 
+  // Lock ordering: updateSessionMap has already RELEASED the session-map lock by here,
+  // so the per-file lock updateFrontmatter takes below is held sequentially, never
+  // nested inside the map lock. Keep it that way — nesting the two locks (or taking
+  // them in the reverse order elsewhere) would risk a lock-ordering cycle.
   if (entry.file && fs.existsSync(entry.file)) {
     const updates = { ended_reason: reason };
     if (reason !== "in-progress") updates.ended_at = endedAt;

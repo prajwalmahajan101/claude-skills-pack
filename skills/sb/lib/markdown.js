@@ -129,7 +129,8 @@ function sleepMs(ms) {
 // Run `fn` while holding an exclusive per-file lock. Acquires `<filePath>.lock` via
 // openSync(..,"wx") with 20ms backoff; a stale lock (crashed holder) is reclaimed
 // after 10s; if the lock can't be taken it proceeds best-effort unlocked (degrades to
-// prior behavior, never deadlocks). Mirrors vault.js:updateSessionMap.
+// prior behavior, never deadlocks) but LOGS the bypass so a silent unlocked write —
+// the exact clobber H3 guards against — is observable. Mirrors vault.js:updateSessionMap.
 function withFileLock(filePath, fn) {
   const lockPath = filePath + ".lock";
   let fd = null;
@@ -141,9 +142,17 @@ function withFileLock(filePath, fn) {
       sleepMs(20);
     }
   }
+  if (fd === null) {
+    try { require("./vault.js").logDiag(`updateFrontmatter: lock not acquired for ${filePath}; writing best-effort unlocked`); } catch {}
+  }
   try { return fn(); }
   finally { if (fd !== null) { try { fs.closeSync(fd); } catch {} try { fs.unlinkSync(lockPath); } catch {} } }
 }
+
+// Monotonic counter so a temp filename is unique even if two writes to the SAME file
+// ever run concurrently in one process (the lock serializes same-file writes today,
+// but this keeps the temp collision-proof against a future re-entrant refactor).
+let tmpCounter = 0;
 
 function updateFrontmatter(filePath, updates) {
   if (!fs.existsSync(filePath)) return;
@@ -163,7 +172,7 @@ function updateFrontmatter(filePath, updates) {
     }
     const { meta, body } = parseFrontmatter(content);
     const merged = { ...meta, ...updates };
-    const tmpFile = `${filePath}.${process.pid}.tmp`;
+    const tmpFile = `${filePath}.${process.pid}.${tmpCounter++}.tmp`;
     fs.writeFileSync(tmpFile, fm(merged) + body);
     fs.renameSync(tmpFile, filePath);
   });
