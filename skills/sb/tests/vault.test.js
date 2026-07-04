@@ -66,3 +66,26 @@ test("ensureDirs creates the project scaffold and seeds meta files", () => {
   assert.equal(fs.readFileSync(p.sessionMap, "utf8").trim(), "{}", "session-map seeded empty");
   assert.ok(p.project.startsWith(V), "project dir is inside the pinned vault");
 });
+
+test("conversation write + frontmatter update round-trips through the vault", () => {
+  const { vault } = freshVault();
+  const md = require("../lib/markdown.js");
+  const p = vault.ensureDirs("demo");
+  const file = path.join(p.conversations, "sess__t.md");
+  md.writeConversation(file, {
+    type: "conversation", session_id: "sess", title: "T", project: "demo",
+    tags: ["a", "b"], ended_reason: "in-progress",
+  }, "# T\n\nbody");
+  // Read back the frontmatter as written.
+  let parsed = md.parseFrontmatter(fs.readFileSync(file, "utf8"));
+  assert.equal(parsed.meta.session_id, "sess");
+  assert.deepEqual(parsed.meta.tags, ["a", "b"]);
+  // Update in place and confirm a single frontmatter block with the new value.
+  md.updateFrontmatter(file, { ended_reason: "clean-exit" });
+  const out = fs.readFileSync(file, "utf8");
+  assert.equal(out.match(/^---$/gm).length, 2, "still exactly one frontmatter block");
+  parsed = md.parseFrontmatter(out);
+  assert.equal(parsed.meta.ended_reason, "clean-exit", "field updated");
+  assert.deepEqual(parsed.meta.tags, ["a", "b"], "untouched fields preserved");
+  assert.match(parsed.body, /body/, "body preserved");
+});
