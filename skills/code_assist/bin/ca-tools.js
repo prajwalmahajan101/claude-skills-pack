@@ -566,7 +566,8 @@ const SECRET_RULES = [
   { rule: "github-token", re: /\bgh[pousr]_[0-9A-Za-z]{36,}\b/ },
   { rule: "private-key", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
   { rule: "jwt", re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/ },
-  { rule: "generic-secret", re: /\b(?:api[_-]?key|secret|password|passwd|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['"]?([^\s'"#]{8,})['"]?/i, group: 1 },
+  // allows compound identifiers (db_secret, secret_token, api_key_prod, X_AUTH_TOKEN).
+  { rule: "generic-secret", re: /(?:^|[^A-Za-z0-9_])(?:[A-Za-z0-9]+[_-])?(?:api[_-]?key|secret|password|passwd|access[_-]?token|auth[_-]?token|access[_-]?key)[A-Za-z0-9_-]*\s*[:=]\s*['"]?([^\s'"#]{8,})['"]?/i, group: 1 },
 ];
 // values that a generic-secret match should IGNORE (placeholders / env refs, not real secrets).
 const SECRET_PLACEHOLDER = /^(?:\$|process\.env|os\.(?:getenv|environ)|env\[|<|\{\{|example|changeme|your[_-]|xxx|todo|null|none|true|false|redacted|\*+)/i;
@@ -620,7 +621,13 @@ function secretScan(args) {
     mode = "paths";
     files = f._.length ? f._ : [];
     if (!files.length) return { ok: false, reason: "usage: secret-scan --staged | --range <a..b> | <paths...>" };
-    for (const file of files) { try { scanText(fs.readFileSync(file, "utf8"), path.basename(file), findings, ignore); } catch {} }
+    // In paths mode, also honor a .ca-secretsignore next to each scanned file.
+    for (const file of files) {
+      try {
+        const perFile = ignore.concat(loadSecretsIgnore(path.dirname(path.resolve(file))));
+        scanText(fs.readFileSync(file, "utf8"), path.basename(file), findings, perFile);
+      } catch {}
+    }
   }
   // Prefer gitleaks when present (best-effort merge; never fails the scan).
   let tool = "builtin";
@@ -748,6 +755,12 @@ function incidentScaffold(args) {
   } catch {}
   const num = String(max + 1).padStart(4, "0");
   const slug = slugify(title);
+  // Warn on a likely-duplicate: same slug already recorded under a different number.
+  let dupe = null;
+  try { dupe = fs.readdirSync(incDir).find((fn) => fn.replace(/^\d{4}-/, "") === `${slug}.md`); } catch {}
+  if (dupe && !f.force) {
+    return { ok: false, reason: `an incident with this topic already exists: docs/incidents/${dupe} — reuse it, or pass --force for a distinct record`, existing: `docs/incidents/${dupe}` };
+  }
   const file = path.join(incDir, `${num}-${slug}.md`);
   const base = lastTag(dir) || "(no release tag yet)";
   const tmpl = githookSafeTemplate("incident-0000-template.md")
@@ -999,9 +1012,17 @@ async function httpJSON(method, url, auth, body) {
 // ---------------------------------------------------------------------------
 // dispatch
 // ---------------------------------------------------------------------------
+function printUsage() {
+  // Print the Usage block from this file's own header comment (single source of truth).
+  const src = fs.readFileSync(__filename, "utf8");
+  const m = src.match(/\*\s*Usage:[\s\S]*?(?=\n \*\/)/);
+  process.stdout.write((m ? m[0].replace(/^ \* ?/gm, "").replace(/^\*/, "") : "ca-tools <command> — see header") + "\n");
+}
+
 async function main() {
   const f = flags(rest);
   switch (cmd) {
+    case "help": case "--help": case "-h": return printUsage();
     case "version": return out({ name: "ca-tools", version: VERSION });
     case "stack-detect": return out(detectStack(f._[0] || "."));
     case "diff-stats": return out(diffStats(f._[0] || ".", !!f.staged));
