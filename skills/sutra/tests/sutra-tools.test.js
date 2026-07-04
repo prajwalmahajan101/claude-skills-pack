@@ -249,6 +249,34 @@ test("recall composes from sb vault alone when code_assist is absent", () => {
   assert.deepEqual(res.lessons.map((l) => l.text), ["vault insight one"]);
 });
 
+test("recall orders cross-source ties deterministically (base before sb by rank)", () => {
+  const root = fakeSkills({ code_assist: "0.6.0", sb: "0.9.1" });
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"],
+    'process.stdout.write(JSON.stringify({lessons:[{text:"base one"},{text:"base two"}],risks:[],memory:[]}))');
+  fakeMemberCli(root, "sb", ["commands", "_runners", "ask-highlights.js"],
+    'process.stdout.write("•  sb one\\n  — v:1\\n•  sb two\\n  — v:2\\n")');
+  // Context overlaps nothing → all scores 0 → ordering falls entirely to member rank.
+  const res = withSkills(root, () => sutra.recallFused(["--context", "zzzznomatch"]));
+  assert.deepEqual(res.lessons.map((l) => l.text), ["base one", "base two", "sb one", "sb two"],
+    "base lessons rank ahead of sb hits deterministically (no _rank collision)");
+});
+
+test("recall surfaces a warning when a member returns unparseable JSON", () => {
+  const root = fakeSkills({ code_assist: "0.6.0" });
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"], 'process.stdout.write("not json{{{")');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "anything"]));
+  assert.equal(res.sources.code_assist, true);
+  assert.ok(res.warnings.some((w) => /unparseable JSON/.test(w)), "warning surfaced instead of silent empty");
+  assert.deepEqual(res.lessons, []);
+});
+
+test("recall surfaces a warning when a member exits non-zero", () => {
+  const root = fakeSkills({ code_assist: "0.6.0" });
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"], 'process.exit(3)');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "anything"]));
+  assert.ok(res.warnings.some((w) => /code_assist recall failed/.test(w)), "non-zero exit reported");
+});
+
 test("bridge rejects a non-status subcommand with a usage error", () => {
   const res = withSkills(fakeSkills({}), () => sutra.bridge(["frobnicate"]));
   assert.equal(res.ok, false);
