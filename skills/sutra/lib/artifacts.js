@@ -118,7 +118,7 @@ function parseIssues(text) {
     let sev = (lines[i].match(sevRe) || [])[1] || "";
     if (!sev) {
       // Scan the block (until the next ISSUE id or a heading) for the metadata line.
-      for (let j = i + 1; j < Math.min(i + 7, lines.length); j++) {
+      for (let j = i + 1; j < lines.length; j++) {
         if (idRe.test(lines[j]) || /^#{1,6}\s/.test(lines[j])) break;
         const m = lines[j].match(sevRe);
         if (m) { sev = m[1]; break; }

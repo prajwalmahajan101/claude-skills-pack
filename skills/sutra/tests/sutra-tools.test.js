@@ -166,6 +166,17 @@ test("schema-check flags an active issue with no Severity/Priority", () => {
   assert.ok(res.review.violations.some((v) => v.includes("ISSUE-009")));
 });
 
+test("schema-check accepts an issue whose Severity/Priority is far below the header", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  const desc = Array.from({ length: 10 }, (_, i) => `paragraph line ${i} describing the issue`).join("\n");
+  fs.writeFileSync(p,
+    `# Issues\n\n### ISSUE-050 — deep metadata\n\n${desc}\n\nSeverity: High · Priority: P1\n`);
+  const res = sutra.schemaCheck(repo);
+  assert.ok(!res.review.violations.some((v) => v.includes("ISSUE-050")),
+    "metadata past the old 7-line window is still found");
+});
+
 test("schema-check is clean (not violating) when no artifacts exist", () => {
   const repo = tmp();
   const res = sutra.schemaCheck(repo);
