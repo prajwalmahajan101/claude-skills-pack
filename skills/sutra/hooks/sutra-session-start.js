@@ -40,7 +40,13 @@ function isGitRepo(cp) {
 
 function topRisks(tools) {
   try {
-    const r = tools.recallFused(["--context", repoContext(), "--limit", "6"]);
+    const ctx = repoContext();
+    // No usable repo context (detached HEAD / no branch) → skip enrichment rather
+    // than surfacing unranked noise; the roster line is already built regardless.
+    if (!ctx) return [];
+    // Tight per-child timeout (1.5s) so two member spawns stay well under the
+    // hook's 5s budget — the hook never depends on recall's default 8s cap.
+    const r = tools.recallFused(["--context", ctx, "--limit", "6", "--timeout", "1500"]);
     return (r.risks || []).slice(0, 2).map((x) => ({ text: String(x.text).slice(0, 120), ref: x.ref }));
   } catch { return []; }
 }

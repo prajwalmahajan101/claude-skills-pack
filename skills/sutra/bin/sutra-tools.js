@@ -271,52 +271,81 @@ function syncArtifacts(dir, project) {
   };
 }
 
+// normalize text for dedup (trim + lowercase + collapse whitespace).
+function normText(s) { return String(s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+// cheap relevance: count context tokens (>=3 chars) that appear in the text.
+function overlap(ctxToks, text) {
+  if (!ctxToks.length) return 0;
+  const t = new Set(String(text || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+  let n = 0;
+  for (const c of ctxToks) if (t.has(c)) n++;
+  return n;
+}
+
 // recall (fused) — the reverse bridge. Compose the members' own knowledge:
 // code_assist's base recall (harness stores: lessons/memory/risks) + sb's vault
-// highlights. sutra never re-implements a member's recall; it drives + merges.
+// highlights. sutra never re-implements a member's recall; it drives + merges,
+// then re-ranks by relevance so vault hits compete fairly with base lessons.
+// --timeout <ms> bounds each member child (callers like the session hook pass a
+// tight cap so they never depend on the default 8s).
 function recallFused(args) {
   const f = flags(args);
   const context = f.context || f._.join(" ") || "";
   const limit = Number(f.limit || 5);
   const dir = f.dir || ".";
+  const timeout = Number(f.timeout || 8000);
   const sources = { code_assist: false, sb: false };
   let lessons = [], risks = [], memory = [];
 
-  // Base: code_assist's own recall (its files are the source of truth).
+  // Base: code_assist's own recall (its files are the source of truth). Pull a
+  // bit deeper than `limit` so the re-rank + dedup below has room to work.
   const caCli = memberPath("code_assist", "bin", "ca-tools.js");
   if (caCli) {
     sources.code_assist = true;
-    const r = sh("node", [caCli, "recall", "--context", context, "--limit", String(limit), "--dir", dir], { timeout: 8000 });
+    const r = sh("node", [caCli, "recall", "--context", context, "--limit", String(limit * 2), "--dir", dir], { timeout });
     if (r.status === 0 && r.stdout) {
       try {
         const base = JSON.parse(r.stdout);
-        lessons = base.lessons || [];
+        lessons = (base.lessons || []).map((x, i) => ({ ...x, source: x.source || "code_assist", _rank: i }));
         risks = base.risks || [];
         memory = base.memory || [];
       } catch {}
     }
   }
 
-  // Layer: sb's vault highlights (verbatim, with provenance), deduped by text.
+  // Layer: sb's vault highlights (verbatim, with provenance).
   const sbCli = memberPath("sb", "commands", "_runners", "ask-highlights.js");
   if (sbCli && context) {
     sources.sb = true;
-    const r = sh("node", [sbCli, context, "--limit", String(limit)], { timeout: 8000 });
+    const r = sh("node", [sbCli, context, "--limit", String(limit)], { timeout });
     if (r.status === 0 && r.stdout) {
-      const seen = new Set(lessons.map((l) => l.text));
       const lines = r.stdout.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const t = lines[i].match(/^•\s*(.+)$/);
         if (!t) continue;
         const ref = (lines[i + 1] || "").match(/—\s*(.+:\d+)\s*$/);
-        const text = t[1].trim();
-        if (!seen.has(text)) { lessons.push({ text, source: "sb", ref: ref ? ref[1] : "sb:vault" }); seen.add(text); }
+        lessons.push({ text: t[1].trim(), source: "sb", ref: ref ? ref[1] : "sb:vault", _rank: i });
       }
     }
   }
 
+  // Merge: dedup (normalized) across lessons + drop any that duplicate a risk;
+  // score by context overlap; stable-sort by score desc, then member rank asc.
+  const ctxToks = [...new Set(String(context).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3))];
+  const riskKeys = new Set(risks.map((r) => normText(r.text)));
+  const seen = new Set();
+  const merged = [];
+  for (const l of lessons) {
+    const k = normText(l.text);
+    if (!k || seen.has(k) || riskKeys.has(k)) continue;
+    seen.add(k);
+    merged.push({ ...l, _score: context ? overlap(ctxToks, l.text) : 0 });
+  }
+  merged.sort((a, b) => (b._score - a._score) || (a._rank - b._rank));
+
+  const strip = (arr) => arr.map(({ _score, _rank, ...rest }) => rest);
   const clip = (a) => a.slice(0, limit);
-  return { context, sources, lessons: clip(lessons), risks: clip(risks), memory: clip(memory) };
+  return { context, sources, lessons: clip(strip(merged)), risks: clip(risks), memory: clip(memory) };
 }
 
 // bridge status — registry-based handoff availability (observable, no-op-safe).
