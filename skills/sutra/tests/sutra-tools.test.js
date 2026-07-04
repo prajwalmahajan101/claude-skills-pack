@@ -226,6 +226,38 @@ test("schema-check ignores a fenced ISSUE header (no phantom violation) (H2)", (
   assert.equal(res.review.violations.length, 0, "only real issues are checked");
 });
 
+test("severity/priority are not taken from a title or prose (F4)", () => {
+  // A bare severity word in a title ("latency is high") or in a description must NOT
+  // satisfy conformance — only labeled or pipe-delimited metadata counts.
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  fs.writeFileSync(p,
+    "# Issues\n\n### ISSUE-301 — latency is high in the auth path\n\nthe cache miss rate is critical here; fix later\n");
+  const res = sutra.schemaCheck(repo);
+  assert.ok(res.review.violations.some((v) => v.includes("ISSUE-301")),
+    "prose 'high'/'critical' is not a valid Severity — issue is flagged");
+  const parsed = sutra.artifacts.parseIssues(fs.readFileSync(p, "utf8"))[0];
+  assert.equal(parsed.severity, "unknown", "no severity extracted from prose");
+  assert.equal(parsed.priority, "", "no priority extracted from prose");
+});
+
+test("schema-check warns on an unclosed code fence (F1)", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  fs.writeFileSync(p,
+    "# Issues\n\n### ISSUE-401 — real\n\nSeverity: High · Priority: P1\n\n```js\nan unclosed fence, no terminator\n");
+  const res = sutra.schemaCheck(repo);
+  assert.ok(res.review.warnings.some((w) => w.includes("unclosed code fence")),
+    "an unbalanced fence is surfaced as a warning, not silently swallowed");
+});
+
+test("fences are matched by type — a ~~~ line does not close a ``` fence (F5)", () => {
+  const block = "### ISSUE-501 — real\nSeverity: High · Priority: P1\n\n```\ncode\n~~~ a tilde line, not a closer\n### ISSUE-999 — still fenced\n```\n";
+  const issues = sutra.artifacts.parseIssues(block);
+  assert.deepEqual(issues.map((i) => i.id), ["ISSUE-501"],
+    "ISSUE-999 stays inside the ``` fence despite the ~~~ line");
+});
+
 test("schema-check is clean (not violating) when no artifacts exist", () => {
   const repo = tmp();
   const res = sutra.schemaCheck(repo);

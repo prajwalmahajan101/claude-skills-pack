@@ -104,23 +104,53 @@ function normalizeSev(s) {
 // new issue header — which would fabricate a phantom issue. Matches both the block
 // form (`### ISSUE-001 — title`) and the inline form (`ISSUE-001 | High | P1`).
 const ISSUE_ID_HEAD = /^[\s>#*\-|]*?(ISSUE-\d+)\b/;
-// A fenced-code delimiter (``` or ~~~, optionally indented, with an optional info
-// string). Lines inside a fence are code, never issue headers.
-const FENCE_RE = /^\s*(```|~~~)/;
+
+// A fenced-code delimiter (``` or ~~~, optionally indented, length ≥3). Returns the
+// fence CHARACTER ('`' or '~') so open/close are matched by type — a ``` block is not
+// closed by a ~~~ line and vice-versa. Lines inside a fence are code, never headers.
+function fenceChar(line) {
+  const m = line.match(/^\s*(`{3,}|~{3,})/);
+  return m ? m[1][0] : null;
+}
+
+// Severity/priority are recognized ONLY in labeled form (`Severity: High`) or as a
+// pipe-delimited inline field (`… | High | …`) — never as a bare word in a title or
+// prose, so a header like "latency is high" does not fabricate a severity. parseIssues
+// (ingest) and checkReviews (conformance) both read through these, so they always agree.
+const SEV_LABELED = /Severity:\s*(critical|high|medium|low)\b/i;
+const SEV_INLINE = /(?:^|\|)\s*(critical|high|medium|low)\s*(?:\||$)/i;
+const PRI_LABELED = /Priority:\s*(P[0-3])\b/i;
+const PRI_INLINE = /(?:^|\|)\s*(P[0-3])\s*(?:\||$)/i;
+function extractSeverity(s) { return (s.match(SEV_LABELED) || s.match(SEV_INLINE) || [])[1] || ""; }
+function extractPriority(s) { return (s.match(PRI_LABELED) || s.match(PRI_INLINE) || [])[1] || ""; }
 
 // Collect the lines of an issue's block: everything after its header line up to the
-// next issue header or the next markdown heading. Fence-aware — a `###`/`ISSUE-` that
-// appears INSIDE a fenced code block does not terminate the block, so metadata after
-// an embedded snippet is still found. Returns the block as a single string.
+// next issue header or the next markdown heading. Fence-aware (by fence type) — a
+// `###`/`ISSUE-` that appears INSIDE a fenced code block does not terminate the block,
+// so metadata after an embedded snippet is still found. Returns a single string.
 function issueBlock(lines, startIdx) {
   const block = [];
-  let inFence = false;
+  let fence = null;
   for (let j = startIdx + 1; j < lines.length; j++) {
-    if (FENCE_RE.test(lines[j])) { inFence = !inFence; block.push(lines[j]); continue; }
-    if (!inFence && (ISSUE_ID_HEAD.test(lines[j]) || /^#{1,6}\s/.test(lines[j]))) break;
+    const d = fenceChar(lines[j]);
+    if (d) { fence = fence === null ? d : (d === fence ? null : fence); block.push(lines[j]); continue; }
+    if (fence === null && (ISSUE_ID_HEAD.test(lines[j]) || /^#{1,6}\s/.test(lines[j]))) break;
     block.push(lines[j]);
   }
   return block.join("\n");
+}
+
+// True if `text` has an unclosed code fence. CommonMark treats an unterminated fence
+// as code running to end-of-file, which would silently swallow any issue headers after
+// it — checkReviews surfaces this as a warning so the file gets fixed rather than
+// quietly under-reporting its open issues.
+function hasUnbalancedFence(text) {
+  let fence = null;
+  for (const ln of String(text || "").split("\n")) {
+    const d = fenceChar(ln);
+    if (d) fence = fence === null ? d : (d === fence ? null : fence);
+  }
+  return fence !== null;
 }
 
 // Parse the active-issue tracker (code_review_issues.md) into structured issues.
@@ -141,23 +171,22 @@ function parseIssues(text) {
   const out = [];
   const lines = String(text).split("\n");
   const idRe = /\b(ISSUE-\d+)\b/; // loose — only used to strip the id from a confirmed header's title
-  const sevRe = /\b(critical|high|medium|low)\b/i;
-  const priRe = /\b(P[0-3])\b/i;
-  let inFence = false;
+  let fence = null;
   for (let i = 0; i < lines.length; i++) {
-    if (FENCE_RE.test(lines[i])) { inFence = !inFence; continue; }
-    if (inFence) continue;
+    const d = fenceChar(lines[i]);
+    if (d) { fence = fence === null ? d : (d === fence ? null : fence); continue; }
+    if (fence !== null) continue;
     if (/^#{1,6}\s*resolved\b/i.test(lines[i].trim())) break;
     const idm = lines[i].match(ISSUE_ID_HEAD);
     if (!idm) continue;
-    let sev = (lines[i].match(sevRe) || [])[1] || "";
-    let pri = (lines[i].match(priRe) || [])[1] || "";
+    let sev = extractSeverity(lines[i]);
+    let pri = extractPriority(lines[i]);
     if (!sev || !pri) {
       // Scan the block (until the next issue header or heading, fence-aware) for
       // whichever of severity/priority the header line didn't already carry.
       const block = issueBlock(lines, i);
-      if (!sev) { const m = block.match(sevRe); if (m) sev = m[1]; }
-      if (!pri) { const m = block.match(priRe); if (m) pri = m[1]; }
+      if (!sev) sev = extractSeverity(block);
+      if (!pri) pri = extractPriority(block);
     }
     const title = lines[i].replace(idRe, "").replace(/^[\s|#>*\-—]+/, "").replace(/\s*\|\s*/g, " ").trim().slice(0, 160);
     out.push({ id: idm[1], severity: normalizeSev(sev), priority: pri ? pri.toUpperCase() : "", title, index: i });
@@ -204,4 +233,4 @@ function buildVaultPayload(root, project) {
   };
 }
 
-module.exports = { repoRoot, readJournals, readReviews, readAdrs, parseIssues, issueBlock, readRepoArtifacts, buildVaultPayload, normalizeSev };
+module.exports = { repoRoot, readJournals, readReviews, readAdrs, parseIssues, issueBlock, fenceChar, hasUnbalancedFence, readRepoArtifacts, buildVaultPayload, normalizeSev };

@@ -39,6 +39,11 @@ const VERSION = "0.1.0";
 const SKILL_ROOT = path.dirname(__dirname);
 const PACK_ROOT = path.dirname(SKILL_ROOT); // the `skills/` dir in dev checkouts
 
+// sutra's interchange parser — the single tokenizer for member artifacts. Required at
+// top level (not lazily) so functions like checkReviews that reference it can never hit
+// an uninitialized binding regardless of call order.
+const artifacts = require(path.join(SKILL_ROOT, "lib", "artifacts.js"));
+
 // ---------------------------------------------------------------------------
 // arg parsing + io (mirrors ca-tools conventions)
 // ---------------------------------------------------------------------------
@@ -223,15 +228,20 @@ function checkReviews(root) {
     res.found++;
     const rel = path.relative(root, p);
     const body = fs.readFileSync(p, "utf8");
-    const active = body.split(/^##\s+Resolved\b/im)[0]; // stop at Resolved section
-    const lines = active.split("\n");
+    const lines = body.split("\n");
+    // An unclosed code fence silently swallows every issue after it (CommonMark treats
+    // it as code-to-EOF), so surface it as a warning rather than under-report conformance.
+    if (artifacts.hasUnbalancedFence(body)) {
+      res.warnings.push(`${rel}: unclosed code fence — issues after it may be silently ignored`);
+    }
     // Validate off artifacts.parseIssues — the SINGLE definition of "what is an issue"
-    // and its severity/priority. It is fence-aware and recognizes both the H3-block and
-    // inline header forms, so conformance here agrees exactly with what sync-artifacts
-    // ingests (H1) and a `### ISSUE-999` inside a fenced code block is ignored (H2). An
-    // issue conforms iff parseIssues resolved both a severity and a priority for it.
+    // and its severity/priority. It is fence-aware, recognizes both the H3-block and
+    // inline header forms, and stops at the `## Resolved` boundary internally (no
+    // divergent pre-split here). Conformance therefore agrees exactly with what
+    // sync-artifacts ingests (H1) and a `### ISSUE-999` in a code fence is ignored (H2).
+    // An issue conforms iff parseIssues resolved both a severity and a priority for it.
     let issueProblems = 0;
-    for (const iss of artifacts.parseIssues(active)) {
+    for (const iss of artifacts.parseIssues(body)) {
       if (iss.severity === "unknown" || !iss.priority) {
         res.violations.push(`${rel}: ${lines[iss.index].trim().slice(0, 60)} — missing valid Severity/Priority`);
         issueProblems++;
@@ -254,8 +264,8 @@ function schemaCheck(dir) {
 // ---------------------------------------------------------------------------
 // bridge core — the cross-plugin seams sutra owns. Every one is a no-op when its
 // member is absent (a missing member is never a hard dependency).
+// (`artifacts` is required at the top of the file so early functions can use it.)
 // ---------------------------------------------------------------------------
-const artifacts = require(path.join(SKILL_ROOT, "lib", "artifacts.js"));
 
 // Resolve a file inside a present member's skill dir, or null.
 function memberPath(id, ...rel) {
