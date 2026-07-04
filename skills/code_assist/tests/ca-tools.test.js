@@ -220,6 +220,21 @@ test("secretScan detects real secrets, masks values, skips placeholders + allowl
   assert.ok(!JSON.stringify(r).includes("AKIAIOSFODNN7EXAMPLE"), "raw secret never emitted");
 });
 
+test("secretScan catches compound-identifier secret names (db_secret, secret_token)", () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, "c.env"), 'db_secret = "abcd1234efgh5678"\nsecret_token="zzzz9999yyyy8888"\nX_AUTH_TOKEN=qwer1234asdf5678\n');
+  const r = ca.secretScan([path.join(d, "c.env")]);
+  assert.ok(r.count >= 3, "matches db_secret, secret_token, X_AUTH_TOKEN");
+});
+
+test("secretScan honors a .ca-secretsignore next to the scanned file (paths mode)", () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, "cfg.py"), 'aws = "AKIAIOSFODNN7EXAMPLE"\n');
+  fs.writeFileSync(path.join(d, ".ca-secretsignore"), "AKIAIOSFODNN7EXAMPLE\n");
+  const r = ca.secretScan([path.join(d, "cfg.py")]);
+  assert.equal(r.count, 0, "per-file ignorefile suppresses the finding");
+});
+
 test("secretScan --staged reads staged blobs in a repo", () => {
   const d = initRepo();
   fs.writeFileSync(path.join(d, "deploy.sh"), "KEY=AKIAIOSFODNN7EXAMPLE\n");
@@ -258,10 +273,13 @@ test("incidentScaffold numbers sequentially from the release tag, idempotent-saf
   assert.ok(w1.written && fs.existsSync(path.join(d, w1.file)));
   const w2 = ca.incidentScaffold(["--title", "cache stampede", "--dir", d, "--apply"]);
   assert.equal(w2.number, "0002", "next incident increments");
-  // re-scaffolding the SAME title/number must not clobber an existing file
+  // re-scaffolding the SAME topic warns (likely duplicate) instead of minting a silent new record
   const dup = ca.incidentScaffold(["--title", "checkout 500s", "--dir", d, "--apply"]);
-  assert.equal(w2.number, "0002");
-  assert.ok(dup.number === "0003" || dup.ok === false, "never silently overwrites an existing incident");
+  assert.equal(dup.ok, false, "duplicate topic is flagged, not silently numbered");
+  assert.match(dup.existing, /0001-checkout-500s\.md$/);
+  // --force overrides to a fresh distinct record
+  const forced = ca.incidentScaffold(["--title", "checkout 500s", "--dir", d, "--apply", "--force"]);
+  assert.equal(forced.number, "0003", "--force writes a new numbered record");
 });
 
 test("envCheck reports missing + extra keys, never values", () => {
