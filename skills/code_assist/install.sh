@@ -70,4 +70,4 @@ echo "  Hooks:    ca-session-start (SessionStart), ca-git-guard (PreToolUse:Bash
 echo "  Commands: $CMD_COUNT slash commands across families —"
 echo "            commit, code_review, journal, plan, debug, adr, verify, structure,"
 echo "            format, github, track, notify, scan, graph, onboard, test, refactor,"
-echo "            release, domains, flow (run /code_assist:<name>)."
+echo "            release, secure, incident, recall, domains, flow (run /code_assist:<name>)."

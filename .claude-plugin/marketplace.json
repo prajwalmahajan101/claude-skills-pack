@@ -3,16 +3,16 @@
   "owner": { "name": "Prajwal Mahajan" },
   "metadata": {
     "description": "A pack of self-contained Claude Code skills: code_assist (developer-workflow powerhouse), sb (second-brain vault capture), and unabridged (complete-output discipline). Each is installable standalone or as a plugin from this marketplace.",
-    "version": "0.5.0"
+    "version": "0.6.0"
   },
   "plugins": [
     {
       "name": "code_assist",
       "source": "./skills/code_assist",
-      "description": "Developer-workflow powerhouse — atomic commits, code review, journals, plan/debug/verify/ADR, structure, release, onboard, integrations. Zero-dep CLI + self-tests + agents + hooks.",
-      "version": "0.5.0",
+      "description": "Developer-workflow powerhouse — atomic commits, code review, journals, plan/debug/verify/ADR, structure, release, onboard, secure (secret-scan/git-hooks), incident, integrations. Bidirectional memory bridge. Zero-dep CLI + self-tests + agents + hooks.",
+      "version": "0.6.0",
       "category": "workflow",
-      "keywords": ["git", "code-review", "workflow", "debug", "plan", "release"]
+      "keywords": ["git", "code-review", "workflow", "debug", "plan", "release", "security", "incident", "memory"]
     },
     {
       "name": "sb",
