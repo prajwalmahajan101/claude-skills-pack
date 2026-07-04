@@ -34,26 +34,44 @@ function parseFrontmatter(content) {
   const body = content.slice(end + 5);
   const meta = {};
   let key = null;
-  let arr = null;
+  let pending = null; // an empty-valued key awaiting indented children (list or map)
   for (const line of head.split("\n")) {
     if (!line.trim()) continue;
-    if (arr && /^\s+-\s+/.test(line)) {
-      arr.push(unquote(line.replace(/^\s+-\s+/, "")));
-      continue;
+    // Indented child of the last empty-valued key: a `- item` list entry or a
+    // one-level nested `key: value` map. The first child decides which.
+    if (pending && /^\s+/.test(line)) {
+      const li = line.match(/^\s+-\s+(.*)$/);
+      if (li) {
+        if (!Array.isArray(meta[pending])) meta[pending] = [];
+        meta[pending].push(unquote(li[1]));
+        continue;
+      }
+      const kv = line.match(/^\s+([\w-]+):\s*(.*)$/);
+      if (kv) {
+        if (meta[pending] === null || Array.isArray(meta[pending])) meta[pending] = {};
+        meta[pending][kv[1]] = coerceScalar(kv[2]);
+        continue;
+      }
     }
-    arr = null;
+    pending = null;
     const m = line.match(/^([\w-]+):\s*(.*)$/);
     if (!m) continue;
     key = m[1];
     const rest = m[2];
-    if (rest === "") { meta[key] = []; arr = meta[key]; }
-    else if (rest === "[]") meta[key] = [];
-    else if (rest === "null") meta[key] = null;
-    else if (rest === "true") meta[key] = true;
-    else if (rest === "false") meta[key] = false;
-    else meta[key] = unquote(rest);
+    // Empty value → could be an empty scalar, a list, or a nested map; defer until
+    // we see (or don't see) indented children. Default to [] for back-compat.
+    if (rest === "") { meta[key] = []; pending = key; }
+    else meta[key] = coerceScalar(rest);
   }
   return { meta, body };
+}
+
+function coerceScalar(rest) {
+  if (rest === "[]") return [];
+  if (rest === "null") return null;
+  if (rest === "true") return true;
+  if (rest === "false") return false;
+  return unquote(rest);
 }
 
 function unquote(s) {
@@ -99,6 +117,14 @@ function appendConversation(filePath, header, body) {
 function updateFrontmatter(filePath, updates) {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, "utf8");
+  // Unterminated frontmatter (leading '---' with no closing '---'): parseFrontmatter
+  // returns the whole file as body, so writing fm()+body would stack a SECOND block
+  // and corrupt the note. Refuse rather than double it. (A valid empty '---\n---\n'
+  // has a closing delimiter and is handled normally.)
+  if (content.startsWith("---\n") && content.indexOf("\n---\n", 4) === -1) {
+    console.error(`sb: refusing to update malformed frontmatter (no closing '---'): ${filePath}`);
+    return;
+  }
   const { meta, body } = parseFrontmatter(content);
   const merged = { ...meta, ...updates };
   fs.writeFileSync(filePath, fm(merged) + body);
