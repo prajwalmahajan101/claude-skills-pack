@@ -26,6 +26,9 @@
  *   onboard-scan [dir]            stack + structure + entry-point orientation blob
  *   selfcheck                     which tools/integrations/siblings are configured
  *   recall --context "<text>"     pull relevant prior lessons/memory/risks (provenance)
+ *   secret-scan --staged|<paths>  detect committed secrets (masked; never prints values)
+ *   deps-audit [dir]              read-only vuln audit (npm/pip/cargo/go)
+ *   env-check [dir]               .env vs .env.example key drift (names only)
  *   bridge <status>               detect sibling skills (sb/unabridged) + handoffs
  *   github <pr|ci|issue|release> …                  thin gh wrappers
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
@@ -549,6 +552,135 @@ function recall(args) {
 }
 
 // ---------------------------------------------------------------------------
+// secure — enforce what the plugin preaches: secret-scan, dep audit, env hygiene.
+// Zero-dep detectors (shell to gitleaks/audit tools when present). Never PRINTS a
+// secret value — always masked. All reads; deps-audit never mutates.
+// ---------------------------------------------------------------------------
+const SECRET_RULES = [
+  { rule: "aws-access-key", re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { rule: "google-api-key", re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  { rule: "slack-token", re: /\bxox[baprs]-[0-9A-Za-z-]{10,}\b/ },
+  { rule: "github-token", re: /\bgh[pousr]_[0-9A-Za-z]{36,}\b/ },
+  { rule: "private-key", re: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/ },
+  { rule: "jwt", re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/ },
+  { rule: "generic-secret", re: /\b(?:api[_-]?key|secret|password|passwd|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['"]?([^\s'"#]{8,})['"]?/i, group: 1 },
+];
+// values that a generic-secret match should IGNORE (placeholders / env refs, not real secrets).
+const SECRET_PLACEHOLDER = /^(?:\$|process\.env|os\.(?:getenv|environ)|env\[|<|\{\{|example|changeme|your[_-]|xxx|todo|null|none|true|false|redacted|\*+)/i;
+
+function maskSecret(s) {
+  if (s.length <= 6) return "*".repeat(s.length);
+  return s.slice(0, 4) + "*".repeat(Math.min(s.length - 6, 12)) + s.slice(-2);
+}
+function loadSecretsIgnore(dir) {
+  try { return fs.readFileSync(path.join(dir, ".ca-secretsignore"), "utf8").split("\n")
+    .map((l) => l.trim()).filter((l) => l && !l.startsWith("#")); } catch { return []; }
+}
+function stagedContent(dir, file) {
+  const r = sh("git", ["-C", dir, "show", ":" + file]);
+  return r.status === 0 ? r.stdout : null;
+}
+function scanText(text, file, findings, ignore) {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/ca:allow-secret/.test(line) || (i > 0 && /ca:allow-secret/.test(lines[i - 1]))) continue;
+    for (const d of SECRET_RULES) {
+      const m = line.match(d.re);
+      if (!m) continue;
+      const val = d.group ? m[d.group] : m[0];
+      if (d.rule === "generic-secret" && SECRET_PLACEHOLDER.test(val)) continue;
+      if (ignore.some((ig) => line.includes(ig) || val.includes(ig))) continue;
+      findings.push({ file, line: i + 1, rule: d.rule, masked: maskSecret(val) });
+    }
+  }
+}
+function secretScan(args) {
+  const f = flags(args);
+  const dir = f.dir || ".";
+  const ignore = loadSecretsIgnore(dir);
+  const findings = [];
+  let files = [];
+  let mode;
+  if (f.staged) {
+    mode = "staged";
+    if (!inRepo(dir)) return { ok: false, reason: "not a git repository" };
+    const r = sh("git", ["-C", dir, "diff", "--cached", "--name-only", "--diff-filter=ACM"]);
+    files = r.stdout.split("\n").filter(Boolean);
+    for (const file of files) { const c = stagedContent(dir, file); if (c != null) scanText(c, file, findings, ignore); }
+  } else if (f.range) {
+    mode = "range:" + f.range;
+    const r = sh("git", ["-C", dir, "diff", "--name-only", "--diff-filter=ACM", String(f.range)]);
+    files = r.stdout.split("\n").filter(Boolean);
+    for (const file of files) { try { scanText(fs.readFileSync(path.join(dir, file), "utf8"), file, findings, ignore); } catch {} }
+  } else {
+    mode = "paths";
+    files = f._.length ? f._ : [];
+    if (!files.length) return { ok: false, reason: "usage: secret-scan --staged | --range <a..b> | <paths...>" };
+    for (const file of files) { try { scanText(fs.readFileSync(file, "utf8"), path.basename(file), findings, ignore); } catch {} }
+  }
+  // Prefer gitleaks when present (best-effort merge; never fails the scan).
+  let tool = "builtin";
+  if (have("gitleaks") && f.staged && inRepo(dir)) {
+    const g = sh("gitleaks", ["protect", "--staged", "--source", dir, "--report-format", "json", "--report-path", "/dev/stdout", "--no-banner"], { timeout: 20000 });
+    if (g.stdout) {
+      try {
+        for (const leak of JSON.parse(g.stdout)) {
+          const file = leak.File || leak.file || "?";
+          const ln = leak.StartLine || leak.line || 0;
+          if (!findings.some((x) => x.file === file && x.line === ln)) {
+            findings.push({ file, line: ln, rule: "gitleaks:" + (leak.RuleID || leak.rule || "match"), masked: maskSecret(String(leak.Secret || leak.match || "")) });
+          }
+        }
+        tool = "builtin+gitleaks";
+      } catch {}
+    }
+  }
+  return { mode, tool, scanned: files.length, count: findings.length, findings };
+}
+
+function depsAudit(dir) {
+  dir = dir || ".";
+  const has = (p) => fs.existsSync(path.join(dir, p));
+  const run = (manager, cmd, cmdArgs, parse) => {
+    if (!have(cmd)) return { manager, available: false, hint: `install ${cmd} to audit ${manager} deps` };
+    const r = sh(cmd, cmdArgs, { cwd: dir, timeout: 60000 });
+    try { return { manager, available: true, ...parse(r) }; }
+    catch (e) { return { manager, available: true, error: "parse failed: " + e.message, raw: (r.stdout || r.stderr || "").slice(0, 300) }; }
+  };
+  if (has("package-lock.json") || has("package.json")) {
+    return run("npm", "npm", ["audit", "--json"], (r) => {
+      const j = JSON.parse(r.stdout || "{}");
+      const v = j.metadata && j.metadata.vulnerabilities || {};
+      const advisories = Object.values(j.vulnerabilities || {}).map((a) => ({ pkg: a.name, severity: a.severity, id: (a.via && a.via[0] && a.via[0].url) || "", title: (a.via && a.via[0] && a.via[0].title) || "" }));
+      return { counts: v, advisories: advisories.slice(0, 50) };
+    });
+  }
+  if (has("Cargo.lock")) return run("cargo", "cargo", ["audit", "--json"], (r) => { const j = JSON.parse(r.stdout || "{}"); return { counts: j.vulnerabilities && j.vulnerabilities.count, advisories: [] }; });
+  if (has("pyproject.toml") || has("requirements.txt")) return run("pip", "pip-audit", ["-f", "json"], (r) => ({ advisories: JSON.parse(r.stdout || "[]") }));
+  if (has("go.mod")) return run("go", "govulncheck", ["-json", "./..."], () => ({ advisories: [], note: "see govulncheck output" }));
+  return { manager: "unknown", available: false, hint: "no recognized dependency manifest in " + path.resolve(dir) };
+}
+
+function envCheck(dir) {
+  dir = dir || ".";
+  const keysOf = (file) => {
+    try {
+      return fs.readFileSync(path.join(dir, file), "utf8").split("\n")
+        .map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && l.includes("="))
+        .map((l) => l.split("=")[0].trim());
+    } catch { return null; }
+  };
+  const actual = keysOf(".env");
+  const example = keysOf(".env.example") || keysOf(".env.sample") || keysOf(".env.template");
+  if (example === null) return { ok: false, reason: "no .env.example/.sample/.template found" };
+  if (actual === null) return { has_env: false, example_keys: example.length, missing: example, extra: [], hint: "no .env — copy the example and fill it" };
+  const aset = new Set(actual), eset = new Set(example);
+  return { has_env: true, example_keys: example.length,
+    missing: example.filter((k) => !aset.has(k)), extra: actual.filter((k) => !eset.has(k)) };
+}
+
+// ---------------------------------------------------------------------------
 // bridge — detect sibling skills + describe handoffs (now bidirectional)
 // ---------------------------------------------------------------------------
 function bridge(args) {
@@ -799,6 +931,9 @@ async function main() {
     case "onboard-scan": return out(onboardScan(f._[0] || "."));
     case "selfcheck": return out(selfcheck());
     case "recall": return out(recall(rest));
+    case "secret-scan": return out(secretScan(rest));
+    case "deps-audit": return out(depsAudit(flags(rest)._[0]));
+    case "env-check": return out(envCheck(flags(rest)._[0]));
     case "github": return out(github(rest));
     case "track": return out(await track(rest));
     case "notify": return out(await notify(rest));
@@ -817,6 +952,6 @@ if (require.main === module) {
   module.exports = {
     detectStack, classifyFile, structureAudit, structureScaffold,
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
-    track, notify, bridge, flags, recall,
+    track, notify, bridge, flags, recall, secretScan, depsAudit, envCheck,
   };
 }

@@ -40,7 +40,7 @@ const FAMILY_DIRS = fs.readdirSync(ROOT, { withFileTypes: true })
   .map((e) => e.name);
 // explicit families with routers (new + integration) that must load discipline
 const MUST_DISCIPLINE = ["plan", "debug", "adr", "verify", "structure", "format",
-  "github", "track", "notify", "scan", "release"];
+  "github", "track", "notify", "scan", "release", "secure"];
 for (const fam of MUST_DISCIPLINE) {
   const r = path.join(ROOT, fam, "ROUTER.md");
   if (!fs.existsSync(r)) { fail(`family ${fam} missing ROUTER.md`); continue; }

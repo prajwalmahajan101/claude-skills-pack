@@ -19,6 +19,7 @@ truth).
 | **structure** | Audit/scaffold/fix a repo against the canonical project structure. | `/code_assist:structure`, `_scaffold`, `_fix` |
 | **format** | Zero-dep markdown formatter + project code formatter. | `/code_assist:format` |
 | **github / track / notify / scan** | gh PRs/CI, Jira, Slack/Telegram, SonarQube/Semgrep. Reads via env tokens; writes dry-run + confirm. | `/code_assist:github` `:track` `:notify` `:scan` |
+| **secure** | Secret-scan (masked), dependency/supply-chain audit, `.env` drift. Enforced at commit by the git-guard hook. | `/code_assist:secure` `:secure_deps` |
 | **graph** | Code intelligence - gitnexus (context/impact/detect-changes) + graphify knowledge graph. | `/code_assist:graph` |
 | **onboard / test / refactor / release** | Seed CLAUDE.md+architecture; TDD; safe refactor; cut a release. | `/code_assist:onboard` `:test` `:refactor` `:release` |
 | **domains** | Condensed self-contained playbooks (backend, frontend, data, api-design, microservices, security, testing, devops, animation-3d/web3d, tui) + a `SKILL-INDEX` mapping every installed skill to a playbook/route/bridge. | `/code_assist:domains` |

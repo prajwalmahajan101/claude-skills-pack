@@ -202,3 +202,39 @@ test("bridge status exposes the pull (reverse) channel", () => {
     assert.equal(b.pull.sources.lessons, 2);
   });
 });
+
+// --- secure family -----------------------------------------------------------
+test("secretScan detects real secrets, masks values, skips placeholders + allowlist", () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, "a.py"),
+    'aws = "AKIAIOSFODNN7EXAMPLE"\n' +
+    'password = "s3cr3tP@ssw0rd123"\n' +
+    'safe = os.getenv("TOKEN")\n' +
+    'gk = "AIzaSyDReal35charGoogleKeyAbcdefghijklmno"  # ca:allow-secret\n');
+  const r = ca.secretScan([path.join(d, "a.py")]);
+  const rules = r.findings.map((f) => f.rule);
+  assert.ok(rules.includes("aws-access-key"), "catches AWS key");
+  assert.ok(rules.includes("generic-secret"), "catches password=");
+  assert.ok(!rules.some((x) => x === "google-api-key"), "allowlisted line skipped");
+  assert.ok(r.findings.every((f) => f.masked.includes("*")), "values are masked");
+  assert.ok(!JSON.stringify(r).includes("AKIAIOSFODNN7EXAMPLE"), "raw secret never emitted");
+});
+
+test("secretScan --staged reads staged blobs in a repo", () => {
+  const d = initRepo();
+  fs.writeFileSync(path.join(d, "deploy.sh"), "KEY=AKIAIOSFODNN7EXAMPLE\n");
+  git(d, "add", "deploy.sh");
+  const r = ca.secretScan(["--staged", "--dir", d]);
+  assert.equal(r.mode, "staged");
+  assert.ok(r.count >= 1 && r.findings[0].rule === "aws-access-key");
+});
+
+test("envCheck reports missing + extra keys, never values", () => {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, ".env.example"), "DB_URL=\nAPI_KEY=\nPORT=\n");
+  fs.writeFileSync(path.join(d, ".env"), "DB_URL=secretvalue\nPORT=3000\nEXTRA=y\n");
+  const r = ca.envCheck(d);
+  assert.deepEqual(r.missing, ["API_KEY"]);
+  assert.deepEqual(r.extra, ["EXTRA"]);
+  assert.ok(!JSON.stringify(r).includes("secretvalue"), "values never surfaced");
+});
