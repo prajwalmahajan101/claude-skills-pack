@@ -26,6 +26,22 @@ function fakeSkills(members) {
   return root;
 }
 
+// Write an executable node CLI stub inside a fake member (so recall composition can
+// be tested without the real members). scriptBody is the JS printed to stdout.
+function fakeMemberCli(root, id, relParts, scriptBody) {
+  const p = path.join(root, id, ...relParts);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, scriptBody);
+  return p;
+}
+
+// Run an in-process helper with SUTRA_SKILLS_DIR pinned, restoring env after.
+function withSkills(root, fn) {
+  const prev = process.env.SUTRA_SKILLS_DIR;
+  process.env.SUTRA_SKILLS_DIR = root;
+  try { return fn(); } finally { process.env.SUTRA_SKILLS_DIR = prev; }
+}
+
 // Run the CLI with a pinned skills root; return parsed JSON stdout.
 function runCLI(args, skillsDir) {
   const r = cp.spawnSync("node", [BIN, ...args], {
@@ -157,4 +173,74 @@ test("schema-check is clean (not violating) when no artifacts exist", () => {
   assert.equal(res.journal.found, 0);
   assert.equal(res.adr.found, 0);
   assert.equal(res.review.found, 0);
+});
+
+// --- bridge core: sync-artifacts / bridge status / recall / loop-emit --------
+test("sync-artifacts builds a vault payload from repo artifacts", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const res = withSkills(fakeSkills({ sb: "0.9.1" }), () => sutra.syncArtifacts(repo));
+  assert.equal(res.ok, true);
+  assert.equal(res.consumer.sb, true);
+  const types = res.notes.map((n) => n.type).sort();
+  assert.deepEqual([...new Set(types)].sort(), ["code-review", "decision", "journal"]);
+  assert.equal(res.counts.journals, 1);
+  assert.equal(res.counts.adrs, 1);
+  assert.equal(res.openIssues.length, 2, "two active issues, resolved one excluded");
+  assert.ok(res.openIssues.every((i) => ["critical", "high", "medium", "low"].includes(i.severity)));
+});
+
+test("sync-artifacts notes sb-absent but still builds the payload", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const res = withSkills(fakeSkills({}), () => sutra.syncArtifacts(repo));
+  assert.equal(res.consumer.sb, false);
+  assert.ok(res.notes.length > 0, "payload built even without sb");
+});
+
+test("bridge status reflects which members are present", () => {
+  const full = withSkills(fakeSkills({ code_assist: "0.6.0", sb: "0.9.1", unabridged: "1.0.0" }), () => sutra.bridge(["status"]));
+  assert.deepEqual(full.present.sort(), ["code_assist", "sb", "unabridged"]);
+  assert.equal(full.handoffs["recall-fusion"].available, true);
+  const none = withSkills(fakeSkills({}), () => sutra.bridge(["status"]));
+  assert.deepEqual(none.present, []);
+  assert.equal(none.handoffs["recall-fusion"].available, false);
+});
+
+test("recall composes code_assist base + sb vault highlights, deduped", () => {
+  const root = fakeSkills({ code_assist: "0.6.0", sb: "0.9.1" });
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"],
+    'process.stdout.write(JSON.stringify({lessons:[{text:"prefer rebase",ref:"L:1"}],risks:[{text:"never force-push main",ref:"L:2"}],memory:[]}))');
+  fakeMemberCli(root, "sb", ["commands", "_runners", "ask-highlights.js"],
+    'process.stdout.write("•  vault insight one\\n  — v:10\\n•  prefer rebase\\n  — v:11\\n")');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "git workflow"]));
+  assert.equal(res.sources.code_assist, true);
+  assert.equal(res.sources.sb, true);
+  const texts = res.lessons.map((l) => l.text);
+  assert.ok(texts.includes("prefer rebase"), "base lesson present");
+  assert.ok(texts.includes("vault insight one"), "vault highlight merged");
+  assert.equal(texts.filter((t) => t === "prefer rebase").length, 1, "deduped by text");
+  assert.ok(res.risks.some((r) => r.text.includes("force-push")), "risks carried from base");
+});
+
+test("recall returns empty (never fabricates) when no members are present", () => {
+  const res = withSkills(fakeSkills({}), () => sutra.recallFused(["--context", "anything"]));
+  assert.equal(res.sources.code_assist, false);
+  assert.equal(res.sources.sb, false);
+  assert.deepEqual(res.lessons, []);
+  assert.deepEqual(res.risks, []);
+});
+
+test("loop-emit appends a durable feedback event", () => {
+  const repo = tmp();
+  const res = withSkills(fakeSkills({ sb: "0.9.1" }), () => sutra.loopEmit(["--event", "verify", "--note", "tests pass", "--risk"]));
+  // repo defaults to "." → resolve against the process cwd; pin via --dir instead:
+  const res2 = withSkills(fakeSkills({}), () => sutra.loopEmit(["--event", "incident", "--note", "outage", "--dir", repo]));
+  assert.equal(res2.ok, true);
+  assert.ok(fs.existsSync(res2.logged));
+  const lines = fs.readFileSync(res2.logged, "utf8").trim().split("\n");
+  const last = JSON.parse(lines[lines.length - 1]);
+  assert.equal(last.event, "incident");
+  assert.equal(last.note, "outage");
+  assert.ok(last.ts, "timestamped");
+  assert.equal(res2.suggest, null, "no sb → no promote suggestion");
+  assert.equal(res.ok, true, "risk event logged too");
 });

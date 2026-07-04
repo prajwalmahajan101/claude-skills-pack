@@ -245,6 +245,120 @@ function schemaCheck(dir) {
 }
 
 // ---------------------------------------------------------------------------
+// bridge core — the cross-plugin seams sutra owns. Every one is a no-op when its
+// member is absent (a missing member is never a hard dependency).
+// ---------------------------------------------------------------------------
+const artifacts = require(path.join(SKILL_ROOT, "lib", "artifacts.js"));
+
+// Resolve a file inside a present member's skill dir, or null.
+function memberPath(id, ...rel) {
+  const r = resolveMember(id);
+  if (!r) return null;
+  const p = path.join(r.dir, ...rel);
+  return fs.existsSync(p) ? p : null;
+}
+
+// sync-artifacts — parse a repo's member artifacts into a vault-ingest payload.
+// The forward bridge: code_assist produces, sutra parses, sb ingests.
+function syncArtifacts(dir, project) {
+  const root = artifacts.repoRoot(dir || ".") || repoRoot(dir || ".");
+  const payload = artifacts.buildVaultPayload(root, project);
+  const sb = resolveMember("sb");
+  return {
+    ok: true,
+    consumer: { sb: !!sb, note: sb ? "feed `notes` to sb's ingest primitive" : "sb absent — payload built but not ingested" },
+    ...payload,
+  };
+}
+
+// recall (fused) — the reverse bridge. Compose the members' own knowledge:
+// code_assist's base recall (harness stores: lessons/memory/risks) + sb's vault
+// highlights. sutra never re-implements a member's recall; it drives + merges.
+function recallFused(args) {
+  const f = flags(args);
+  const context = f.context || f._.join(" ") || "";
+  const limit = Number(f.limit || 5);
+  const dir = f.dir || ".";
+  const sources = { code_assist: false, sb: false };
+  let lessons = [], risks = [], memory = [];
+
+  // Base: code_assist's own recall (its files are the source of truth).
+  const caCli = memberPath("code_assist", "bin", "ca-tools.js");
+  if (caCli) {
+    sources.code_assist = true;
+    const r = sh("node", [caCli, "recall", "--context", context, "--limit", String(limit), "--dir", dir], { timeout: 8000 });
+    if (r.status === 0 && r.stdout) {
+      try {
+        const base = JSON.parse(r.stdout);
+        lessons = base.lessons || [];
+        risks = base.risks || [];
+        memory = base.memory || [];
+      } catch {}
+    }
+  }
+
+  // Layer: sb's vault highlights (verbatim, with provenance), deduped by text.
+  const sbCli = memberPath("sb", "commands", "_runners", "ask-highlights.js");
+  if (sbCli && context) {
+    sources.sb = true;
+    const r = sh("node", [sbCli, context, "--limit", String(limit)], { timeout: 8000 });
+    if (r.status === 0 && r.stdout) {
+      const seen = new Set(lessons.map((l) => l.text));
+      const lines = r.stdout.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].match(/^•\s*(.+)$/);
+        if (!t) continue;
+        const ref = (lines[i + 1] || "").match(/—\s*(.+:\d+)\s*$/);
+        const text = t[1].trim();
+        if (!seen.has(text)) { lessons.push({ text, source: "sb", ref: ref ? ref[1] : "sb:vault" }); seen.add(text); }
+      }
+    }
+  }
+
+  const clip = (a) => a.slice(0, limit);
+  return { context, sources, lessons: clip(lessons), risks: clip(risks), memory: clip(memory) };
+}
+
+// bridge status — registry-based handoff availability (observable, no-op-safe).
+function bridge(args) {
+  const sub = flags(args)._[0] || "status";
+  if (sub !== "status") return { ok: false, reason: "usage: bridge <status>" };
+  const reg = registry();
+  const has = (id) => reg.present.includes(id);
+  return {
+    present: reg.present,
+    handoffs: {
+      "artifact-sync": has("sb")
+        ? "code_assist artifacts (.journal/.code_review/docs/adr) → sutra parses → sb vault ingests"
+        : "sb absent — artifacts still built by sync-artifacts, not ingested",
+      "recall-fusion": {
+        base: has("code_assist") ? "code_assist recall (harness stores)" : "code_assist absent",
+        vault: has("sb") ? "sb vault highlights" : "sb absent",
+        available: has("code_assist") || has("sb"),
+      },
+      "output-discipline": has("unabridged") ? "full-output steps honor unabridged" : "unabridged absent (optional)",
+    },
+    schema: "sutra owns the interchange schema (schema-check enforces conformance)",
+  };
+}
+
+// loop-emit — record a feedback event (verify/plan/incident outcome). The closed
+// loop: writing an outcome feeds the pull-back so recall surfaces it next time.
+// Durable, deterministic; the command layer offers to promote it to an sb lesson.
+function loopEmit(args) {
+  const f = flags(args);
+  const event = f.event || f._[0];
+  if (!event) return { ok: false, reason: "usage: loop-emit --event <verify|plan|incident|...> [--note <text>] [--risk]" };
+  const root = artifacts.repoRoot(f.dir || ".") || repoRoot(f.dir || ".");
+  const dir = path.join(root, ".sutra");
+  fs.mkdirSync(dir, { recursive: true });
+  const logFile = path.join(dir, "loop.jsonl");
+  const entry = { ts: new Date().toISOString(), event, note: f.note || "", risk: !!f.risk };
+  fs.appendFileSync(logFile, JSON.stringify(entry) + "\n");
+  return { ok: true, logged: logFile, entry, suggest: resolveMember("sb") ? "promote to /sutra:capture (sb lesson)" : null };
+}
+
+// ---------------------------------------------------------------------------
 // selfcheck — registry + orchestrator config in one shot
 // ---------------------------------------------------------------------------
 function selfcheck() {
@@ -278,6 +392,10 @@ async function main() {
       if (flags(rest)["exit-code"]) process.exit(res.ok ? 0 : 1);
       return out(res);
     }
+    case "bridge": return out(bridge(rest));
+    case "recall": return out(recallFused(rest));
+    case "sync-artifacts": return out(syncArtifacts(flags(rest)._[0] || ".", flags(rest).project));
+    case "loop-emit": return out(loopEmit(rest));
     case undefined: return die("no command. see header for usage.", 2);
     default: return die("unknown command: " + cmd, 2);
   }
@@ -290,5 +408,6 @@ if (require.main === module) {
     flags, safeJSON, resolveMember, memberVersion, loadMembers,
     registry, memberFor, selfcheck, VERSION, SKILL_ROOT, PACK_ROOT,
     repoRoot, checkJournals, checkAdrs, checkReviews, schemaCheck,
+    memberPath, syncArtifacts, recallFused, bridge, loopEmit, artifacts,
   };
 }
