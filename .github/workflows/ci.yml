@@ -37,6 +37,10 @@ jobs:
           node --test skills/code_assist/tests/ca-tools.test.js
           node --test skills/sutra/tests/sutra-tools.test.js
           node --test skills/sb/tests/ingest.test.js
+          node --test skills/sb/tests/jsonl.test.js
+          node --test skills/sb/tests/markdown.test.js
+          node --test skills/sb/tests/vault.test.js
+          node --test skills/sb/tests/vault-repair.test.js
 
       # Standalone structural eval (asserts the code_assist skill tree is consistent).
       - name: structural eval
