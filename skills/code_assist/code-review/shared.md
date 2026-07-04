@@ -79,6 +79,7 @@ Before falling back to raw Glob/Grep, check for a prebuilt code graph — it giv
 
 - **Graphify graph** — if `graphify-out/graph.json` exists, read it to seed the architecture model. Read `graphify-out/GRAPH_REPORT.md` if present — its "god nodes" / hotspots are direct **anti-pattern candidates** for Step 3.
 - **GitNexus** — if the `gitnexus` CLI is available (`command -v gitnexus`, else `npx gitnexus@latest`) and the repo is indexed, use `gitnexus query "<area>"` and `gitnexus context <symbol>` to map modules, callers, and dependencies precisely.
+- **Blast-radius prep (deterministic, run this once)** — `node ~/.claude/skills/code_assist/bin/ca-tools.js graph review-prep`. It returns the changed files and, when GitNexus is indexed, a **blast-radius table** (`symbol → impactedCount, risk`) built from the diff; when GitNexus is absent it returns the candidate symbols plus a "not measured" note. This picks *which* symbols to measure for you — carry the table into Step 3 to ground severity instead of guessing which symbols matter.
 
 Use these via **Bash/Read only** — the MCP servers and the `code-intel` agent are *not* reachable from inside this review (a subagent can't call MCP or spawn agents). Do **not** run a long `gitnexus analyze` index yourself; if the repo isn't indexed, just note it and fall back to Glob/Grep.
 
@@ -108,7 +109,7 @@ Explicitly detect:
 - Future scalability or failure risks
 - Design **regressions** vs. the previous review (if prior state exists)
 
-**Ground severity in measured blast radius (if GitNexus is available).** For each suspected coupling hotspot or risky symbol, run `gitnexus impact <symbol>` (via Bash; upstream/dependants is the default, returns `impactedCount` + `risk`). A defect or anti-pattern in a high-fan-in symbol (large `impactedCount`, or a `GRAPH_REPORT.md` god-node) is higher Severity/Priority — and now you can say so *with evidence* ("impactedCount 65, risk MEDIUM per `gitnexus impact`"). Use this to justify P0/Critical vs. P2/P3 in Step 4's issues, not gut feel. If GitNexus isn't available, assign severity as before and note that blast radius was not measured.
+**Ground severity in measured blast radius.** Use the **`graph review-prep` blast-radius table** from Step 2.0 (or run `gitnexus impact <symbol>` directly for any extra symbol). A defect or anti-pattern in a high-fan-in symbol (large `impactedCount`, or a `GRAPH_REPORT.md` god-node) is higher Severity/Priority — say so *with evidence* ("impactedCount 65, risk HIGH per `graph review-prep`"). Use this to justify P0/Critical vs. P2/P3 in Step 4's issues, not gut feel. When `review-prep` reports `available: false` (GitNexus not indexed), assign severity by judgment and note that blast radius was not measured.
 
 Every observation must be grounded in real code (`file:line`). No hypothetical or generic advice.
 

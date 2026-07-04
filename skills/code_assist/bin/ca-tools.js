@@ -36,8 +36,9 @@
  *   track <get|transitions|comment|transition> …    Jira REST (dry-run writes)
  *   notify <slack|telegram> --text … [--confirm]    webhook post (dry-run default)
  *   scan <sonar> …                                  Sonar web API (read-only)
- *   graph <status|index|context|impact|detect-changes|query> …  code intel
- *                                 (gitnexus call graph + graphify knowledge graph)
+ *   graph <status|index|context|impact|detect-changes|query|review-prep> …  code intel
+ *                                 (gitnexus call graph + graphify knowledge graph;
+ *                                  review-prep = blast-radius table for a review)
  *   version                       print tool version
  */
 
@@ -932,9 +933,91 @@ function graph(args) {
       if (gfy) { const r = sh("graphify", ["query", q]); return { ok: r.status === 0, tool: "graphify", out: r.stdout }; }
       return { ok: false, reason: "neither gitnexus nor graphify installed." };
     }
+    case "review-prep":
+      return reviewPrep(args.slice(1));
     default:
-      return { ok: false, reason: "usage: graph <status|index|context|impact|detect-changes|query> [args]" };
+      return { ok: false, reason: "usage: graph <status|index|context|impact|detect-changes|query|review-prep> [args]" };
   }
+}
+
+// review-prep — deterministic blast-radius grounding for a code review. Computes
+// the changed files, extracts candidate symbols from the diff, and (when gitnexus
+// is present + indexed) measures each symbol's impact so severity can be grounded
+// in evidence instead of gut feel. Degrades cleanly when gitnexus is absent.
+// Read-only. Consumed by the code-review router / architectural-reviewer agent.
+const SYMBOL_RULES = [
+  { ext: /\.(js|jsx|ts|tsx|mjs|cjs)$/, res: [
+    /(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g,
+    /(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/g,
+    /(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/g,
+  ] },
+  { ext: /\.py$/, res: [/^\s*def\s+([A-Za-z_]\w*)/gm, /^\s*class\s+([A-Za-z_]\w*)/gm] },
+  { ext: /\.go$/, res: [/^func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)/gm, /^type\s+([A-Za-z_]\w*)\s/gm] },
+  { ext: /\.(java|kt)$/, res: [/(?:public|private|protected)\s+(?:static\s+)?[\w<>\[\]]+\s+([A-Za-z_]\w*)\s*\(/g, /class\s+([A-Za-z_]\w*)/g] },
+  { ext: /\.(rs)$/, res: [/fn\s+([A-Za-z_]\w*)/g, /struct\s+([A-Za-z_]\w*)/g, /enum\s+([A-Za-z_]\w*)/g] },
+];
+
+function extractSymbols(content, file) {
+  const rule = SYMBOL_RULES.find((r) => r.ext.test(file));
+  if (!rule) return [];
+  const out = new Set();
+  for (const re of rule.res) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(content)) !== null) if (m[1]) out.add(m[1]);
+  }
+  return [...out];
+}
+
+function changedFiles(dir) {
+  // Prefer staged; fall back to the working-tree diff vs HEAD.
+  const staged = sh("git", ["-C", dir, "diff", "--cached", "--name-only"]);
+  let names = staged.status === 0 && staged.stdout ? staged.stdout : "";
+  if (!names) {
+    const wt = sh("git", ["-C", dir, "diff", "--name-only", "HEAD"]);
+    names = wt.status === 0 ? wt.stdout : "";
+  }
+  return names.split("\n").map((s) => s.trim()).filter(Boolean);
+}
+
+// Best-effort parse of `gitnexus impact` output: pull an impacted count + risk.
+function parseImpact(out) {
+  const count = (out.match(/impacted[^0-9]*([0-9]+)/i) || out.match(/\b([0-9]+)\s+(?:depend|caller|impacted)/i) || [])[1];
+  const risk = (out.match(/\brisk[:\s]+(critical|high|medium|low)\b/i) || out.match(/\b(CRITICAL|HIGH|MEDIUM|LOW)\b/) || [])[1];
+  return { impactedCount: count !== undefined ? Number(count) : null, risk: risk ? risk.toUpperCase() : null };
+}
+
+function reviewPrep(args) {
+  const f = flags(args);
+  const dir = f._[0] || ".";
+  if (!inRepo(dir)) return { ok: false, reason: "not a git repository" };
+  const files = changedFiles(dir);
+  const gnx = have("gitnexus");
+  // Candidate symbols: explicit --symbols wins; else extract from changed files.
+  let symbols = [];
+  if (f.symbols) symbols = String(f.symbols).split(",").map((s) => s.trim()).filter(Boolean);
+  else {
+    for (const rel of files) {
+      let body; try { body = fs.readFileSync(path.join(dir, rel), "utf8"); } catch { continue; }
+      for (const s of extractSymbols(body, rel)) symbols.push(s);
+    }
+    symbols = [...new Set(symbols)].slice(0, 25);
+  }
+  if (!gnx) {
+    return { ok: true, available: false, changedFiles: files, candidateSymbols: symbols,
+      note: "GitNexus not installed — review severity is NOT blast-radius-grounded; assign severity by judgment and note that blast radius was not measured." };
+  }
+  // Measure blast radius per symbol (bounded; skips gracefully on per-symbol failure).
+  const table = [];
+  for (const sym of symbols.slice(0, 20)) {
+    const r = sh("gitnexus", ["impact", sym], { cwd: dir, timeout: 1000 * 60 });
+    if (r.status !== 0) continue;
+    const { impactedCount, risk } = parseImpact(r.stdout);
+    table.push({ symbol: sym, impactedCount, risk });
+  }
+  table.sort((a, b) => (b.impactedCount || 0) - (a.impactedCount || 0));
+  return { ok: true, available: true, changedFiles: files, blastRadius: table,
+    note: "Ground Severity/Priority in impactedCount + risk: a defect in a high-fan-in symbol is higher severity. Cite the count (e.g. 'impactedCount 65, risk HIGH')." };
 }
 function tail(s, n = 40) { const l = String(s || "").split("\n"); return l.length > n ? l.slice(-n).join("\n") : String(s || ""); }
 
@@ -1012,5 +1095,6 @@ if (require.main === module) {
     formatMarkdown, coerce, changelog, versionDetect, onboardScan, selfcheck,
     track, notify, flags, recall, secretScan, depsAudit, envCheck,
     installGitHooks, uninstallGitHooks, incidentScaffold,
+    graph, reviewPrep, extractSymbols, changedFiles, parseImpact,
   };
 }

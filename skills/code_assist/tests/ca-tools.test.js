@@ -192,6 +192,44 @@ test("recall is bounded by --limit", () => {
   });
 });
 
+// --- graph review-prep (blast-radius grounding) ------------------------------
+test("extractSymbols pulls definitions per language", () => {
+  const js = "export function alpha(){}\nclass Beta {}\nconst gamma = async () => {}\nconst notFn = 3;";
+  const s = ca.extractSymbols(js, "src/x.ts");
+  assert.ok(s.includes("alpha") && s.includes("Beta") && s.includes("gamma"), JSON.stringify(s));
+  assert.ok(!s.includes("notFn"), "non-callable const not captured");
+  const py = "def do_thing():\n    pass\nclass Widget:\n    pass\n";
+  const p = ca.extractSymbols(py, "m.py");
+  assert.deepEqual(p.sort(), ["Widget", "do_thing"]);
+  assert.deepEqual(ca.extractSymbols("whatever", "README.md"), [], "unknown ext → none");
+});
+
+test("parseImpact reads count + risk from gitnexus-style output", () => {
+  assert.deepEqual(ca.parseImpact("impactedCount: 65, risk: HIGH"), { impactedCount: 65, risk: "HIGH" });
+  assert.deepEqual(ca.parseImpact("12 dependants found\nRisk MEDIUM"), { impactedCount: 12, risk: "MEDIUM" });
+  assert.deepEqual(ca.parseImpact("no numbers here"), { impactedCount: null, risk: null });
+});
+
+test("review-prep lists changed files + candidate symbols (degrades without gitnexus)", () => {
+  const d = initRepo();
+  fs.writeFileSync(path.join(d, "svc.js"), "export function handlePayment(){}\nclass Ledger {}\n");
+  git(d, "add", "svc.js");
+  const r = ca.reviewPrep(["--dir", d]); // note: reviewPrep reads f._[0], so pass dir positionally
+  const r2 = ca.reviewPrep([d]);
+  assert.equal(r2.ok, true);
+  assert.ok(r2.changedFiles.includes("svc.js"), JSON.stringify(r2.changedFiles));
+  // gitnexus may or may not be installed; either shape is valid, but symbols must be discoverable.
+  const syms = r2.available ? r2.blastRadius.map((b) => b.symbol) : r2.candidateSymbols;
+  if (!r2.available) assert.ok(syms.includes("handlePayment") && syms.includes("Ledger"), JSON.stringify(r2));
+  assert.ok(typeof r2.note === "string");
+});
+
+test("review-prep rejects a non-repo directory", () => {
+  const d = tmp();
+  const r = ca.reviewPrep([d]);
+  assert.equal(r.ok, false);
+});
+
 // --- secure family -----------------------------------------------------------
 test("secretScan detects real secrets, masks values, skips placeholders + allowlist", () => {
   const d = tmp();
