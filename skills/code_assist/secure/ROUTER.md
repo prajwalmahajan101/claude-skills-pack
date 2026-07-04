@@ -34,5 +34,5 @@ non-mutating - nothing calls out or auto-fixes.
 - The `ca-git-guard` hook runs `secret-scan --staged` on every commit (warn by default, block under
   `CA_GIT_GUARD_STRICT=1`); `secure` is the interactive, whole-repo counterpart.
 
-> **Bridge:** record a recurring class of leak (or a resolved audit finding) as an `/sb:lesson`
-> tagged `risk` - `recall` then surfaces it in future reviews. See `bridge/ROUTER.md`.
+> **Note:** a recurring class of leak (or a resolved audit finding) recorded as a lesson tagged
+> `risk` is surfaced by `recall` in future reviews.

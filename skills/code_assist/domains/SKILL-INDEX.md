@@ -1,6 +1,6 @@
 ---
 name: code_assist/domains/SKILL-INDEX
-description: Complete map of the user's installed skills to code_assist coverage - a condensed playbook, a route to the deeper standalone skill, or a bridge. Makes "absorb everything" explicit even where a playbook is condensed.
+description: Complete map of the user's installed skills to code_assist coverage - a condensed playbook or a route to the deeper standalone skill. Makes "absorb everything" explicit even where a playbook is condensed.
 type: reference
 ---
 
@@ -8,8 +8,8 @@ type: reference
 
 code_assist carries **condensed, self-contained playbooks** for the operative knowledge, and
 names the deeper standalone skill as an optional reference. This index maps every major
-installed skill to its coverage: **Playbook** (self-contained here), **Route** (defer to the
-standalone skill for depth), or **Bridge** (a sibling skill code_assist hands off to).
+installed skill to its coverage: **Playbook** (self-contained here) or **Route** (defer to the
+standalone skill for depth).
 
 ## Frontend / UI / UX
 | Skill | Coverage |
@@ -51,9 +51,7 @@ standalone skill for depth), or **Bridge** (a sibling skill code_assist hands of
 | codebase-onboarding | Family `onboard/` (native) |
 | search-first, regex-vs-llm-structured-text, context-budget | Route (referenced from `plan`/`domains`) |
 | graphify, gitnexus | Family `graph/` (native integration) |
-| **sb** (second brain) | **Bridge** - journal/adr/review artifacts -> `/sb:sync-project` (see `bridge/ROUTER.md`) |
-| **unabridged** | **Bridge** - full-output families honor the no-truncation rule |
-| lessons, remember | Bridge via sb / referenced by `journal` |
+| lessons, remember | Read directly by `recall` (harness stores) |
 
 ## Note
 Where a row says **Route**, code_assist deliberately does not duplicate a rich, version-pinned

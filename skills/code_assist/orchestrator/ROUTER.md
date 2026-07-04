@@ -24,7 +24,7 @@ Load `_shared/discipline.md` + `_shared/state.md` first. Read `STATE.md` before 
 1. `review` (auto-detect stack) → fix loop until issues resolved or deferred.
 2. `verify` → fresh evidence the change works (run tests/app).
 3. `commit` (interactive) → atomic Conventional Commits, no AI footer.
-4. `journal` update → reference the new SHAs; mirror to sb vault if configured.
+4. `journal` update → reference the new SHAs.
 5. `track transition` → move the linked ticket (dry-run + confirm).
 6. `notify` → post a summary to slack/telegram (confirm before send).
 Stop early and report if review issues remain unresolved and undeferred.

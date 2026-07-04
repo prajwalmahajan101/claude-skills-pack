@@ -7,7 +7,7 @@
 //  1. Every commands/*.md references a family file that exists.
 //  2. Every family <dir>/ROUTER.md loads _shared/discipline.md.
 //  3. SKILL.md router rows point at real ROUTER.md files.
-//  4. No placeholder leakage (delegates to unabridged check_placeholders.sh if present).
+//  4. No placeholder leakage (self-contained conservative marker scan).
 
 const fs = require("node:fs");
 const os = require("node:os");
@@ -35,7 +35,7 @@ for (const f of fs.readdirSync(cmdDir).filter((x) => x.endsWith(".md"))) {
 // 2. every family ROUTER.md loads discipline (families that have a ROUTER)
 const FAMILY_DIRS = fs.readdirSync(ROOT, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !["bin", "_shared", "commands", "agents", "tests",
-    "structure", "domains", "orchestrator", ".claude-plugin", "hooks", "bridge", "git-commit",
+    "structure", "domains", "orchestrator", ".claude-plugin", "hooks", "git-commit",
     "code-review", "journal"].includes(e.name))
   .map((e) => e.name);
 // explicit families with routers (new + integration) that must load discipline
@@ -56,26 +56,31 @@ for (const m of skill.matchAll(/`([a-z-]+\/ROUTER\.md)`/g)) {
   else fail(`SKILL.md references missing ${m[1]}`);
 }
 
-// 4. placeholder leakage (best-effort; skip if the checker is absent)
-const checker = path.join(os.homedir(), ".claude", "skills", "unabridged", "scripts", "check_placeholders.sh");
-if (fs.existsSync(checker)) {
+// 4. placeholder leakage — code_assist owns its own guarantee (self-contained,
+// no cross-skill dependency). Conservative markers only, to avoid false positives
+// on legitimate prose.
+const PLACEHOLDER = /\b(for brevity|rest of (the )?(code|file|implementation|function)s?\s+(omitted|here|elided)|\.\.\.\s*\(truncated\)|<placeholder>|TODO:\s*implement this)\b/i;
+{
   const files = [];
   (function walk(d) {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       if (e.name === "node_modules" || e.name.startsWith(".")) continue;
       const full = path.join(d, e.name);
       if (e.isDirectory()) walk(full);
-      else if (/\.(md|js)$/.test(e.name) && !full.includes("/templates/")) files.push(full);
+      else if (/\.(md|js)$/.test(e.name) && !full.includes("/templates/") && full !== __filename) files.push(full);
     }
   })(ROOT);
-  const r = cp.spawnSync("bash", [checker, ...files], { encoding: "utf8" });
-  if (r.status === 0) ok(`placeholder check clean (${files.length} files)`);
-  else fail(`placeholder leakage:\n${(r.stdout || "") + (r.stderr || "")}`);
-} else {
-  ok("placeholder check skipped (unabridged not installed)");
+  const leaks = [];
+  for (const fp of files) {
+    const body = read(fp);
+    const line = body.split("\n").find((l) => PLACEHOLDER.test(l));
+    if (line) leaks.push(`${path.relative(ROOT, fp)}: ${line.trim().slice(0, 80)}`);
+  }
+  if (!leaks.length) ok(`placeholder check clean (${files.length} files)`);
+  else fail(`placeholder leakage:\n  ${leaks.join("\n  ")}`);
 }
 
-// 5. plugin manifests + hooks + bridge are present and valid JSON
+// 5. plugin manifests + hooks are present and valid JSON
 function checkJSON(rel, label) {
   const p = path.join(ROOT, rel);
   if (!fs.existsSync(p)) { fail(`${label} missing: ${rel}`); return; }
@@ -90,8 +95,8 @@ if (fs.existsSync(marketplace)) {
   try { JSON.parse(read(marketplace)); ok("marketplace.json valid"); }
   catch (e) { fail(`marketplace.json invalid JSON (${e.message})`); }
 } else ok("marketplace.json check skipped (not in pack layout)");
-// hook scripts + bridge doc exist
-for (const h of ["hooks/ca-session-start.js", "hooks/ca-git-guard.js", "bridge/ROUTER.md"]) {
+// hook scripts exist
+for (const h of ["hooks/ca-session-start.js", "hooks/ca-git-guard.js"]) {
   if (fs.existsSync(path.join(ROOT, h))) ok(`present: ${h}`);
   else fail(`missing: ${h}`);
 }

@@ -23,9 +23,9 @@ without evidence). Speed comes from a tight scope, not from skipping the discipl
 
 ## The closed loop (why incidents feed the whole pack)
 
-A postmortem's action-items and lessons should be captured as an `/sb:lesson` tagged **risk**. The
-reverse bridge (`recall`) then surfaces that risk automatically in future `plan`/`debug`/`review`
-and at session start - so the same class of outage is caught before it recurs. See `bridge/ROUTER.md`.
+A postmortem's action-items and lessons should be captured as a lesson tagged **risk**, so `recall`
+then surfaces that risk automatically in future `plan`/`debug`/`review` and at session start - the
+same class of outage is caught before it recurs.
 
-> **Bridge:** `postmortem` writes `docs/incidents/` (sb can `/sb:sync-project`) and should emit an
-> `/sb:lesson` tagged `risk`. `hotfix` ends in `verify` then `release`.
+> **Note:** `postmortem` writes `docs/incidents/` and should record a lesson tagged `risk`.
+> `hotfix` ends in `verify` then `release`.

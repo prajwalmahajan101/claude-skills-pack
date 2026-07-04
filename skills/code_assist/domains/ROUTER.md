@@ -24,7 +24,7 @@ installed, these playbooks name it as the deeper reference - but never require i
 | Combining 3D + animation libraries (architecture/perf) | `web3d.md` |
 | Terminal UI / CLI dashboard / Bubble Tea / Ratatui | `tui.md` |
 
-Full coverage map of the installed skill library (playbook / route / bridge): `SKILL-INDEX.md`.
+Full coverage map of the installed skill library (playbook / route): `SKILL-INDEX.md`.
 
 ## How to use
 1. Load the matching playbook; apply its principles to the task.

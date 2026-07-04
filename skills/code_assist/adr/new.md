@@ -16,7 +16,6 @@ type: skill
    agreed).
 5. **Update the index** (`adr_index`) and add a one-line entry to the project `CLAUDE.md`
    ADR index if present.
-6. Optionally mirror to the sb vault (`11_Decisions`) if configured.
 
 ## Rules
 - One decision per file. Plain, active Decision statement.

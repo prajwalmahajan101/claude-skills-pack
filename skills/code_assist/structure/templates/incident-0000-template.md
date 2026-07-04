@@ -27,11 +27,11 @@ process that allowed it, not a person. -->
 
 ## Action items
 
-<!-- Preventive work so this class of failure can't recur. Tag durable ones as **risk** and capture
-them as an sb lesson so `recall` surfaces them in future plan/debug/review. -->
+<!-- Preventive work so this class of failure can't recur. Tag durable ones as **risk** and record
+them as a lesson so `recall` surfaces them in future plan/debug/review. -->
 
 - [ ] <!-- action --> (owner)
 
 ## Lessons
 
-<!-- What we learned. Consider `/sb:lesson "<title>"` tagged `risk` - this feeds the reverse bridge. -->
+<!-- What we learned. Record a lesson tagged `risk` so `recall` surfaces it later. -->

@@ -20,10 +20,10 @@ truth).
 | **format** | Zero-dep markdown formatter + project code formatter. | `/code_assist:format` |
 | **github / track / notify / scan** | gh PRs/CI, Jira, Slack/Telegram, SonarQube/Semgrep. Reads via env tokens; writes dry-run + confirm. | `/code_assist:github` `:track` `:notify` `:scan` |
 | **secure** | Secret-scan (masked), dependency/supply-chain audit, `.env` drift, installable git-hooks. Enforced at commit by the git-guard hook. | `/code_assist:secure` `:secure_deps` `:secure_hooks` |
-| **incident** | Disciplined hotfix (branch from the release tag) + blameless postmortem in `docs/incidents/`. Feeds risks back via the bridge. | `/code_assist:incident` `:incident_postmortem` |
+| **incident** | Disciplined hotfix (branch from the release tag) + blameless postmortem in `docs/incidents/`. Records risks that `recall` surfaces later. | `/code_assist:incident` `:incident_postmortem` |
 | **graph** | Code intelligence - gitnexus (context/impact/detect-changes) + graphify knowledge graph. | `/code_assist:graph` |
 | **onboard / test / refactor / release** | Seed CLAUDE.md+architecture; TDD; safe refactor; cut a release. | `/code_assist:onboard` `:test` `:refactor` `:release` |
-| **domains** | Condensed self-contained playbooks (backend, frontend, data, api-design, microservices, security, testing, devops, animation-3d/web3d, tui) + a `SKILL-INDEX` mapping every installed skill to a playbook/route/bridge. | `/code_assist:domains` |
+| **domains** | Condensed self-contained playbooks (backend, frontend, data, api-design, microservices, security, testing, devops, animation-3d/web3d, tui) + a `SKILL-INDEX` mapping every installed skill to a playbook/route. | `/code_assist:domains` |
 | **flow** | Cross-family orchestrator: `ship`, `start`, `fix`, `land`. | `/code_assist:flow` |
 
 ## Architecture
@@ -38,7 +38,6 @@ code_assist/
 ├── domains/{ROUTER,SKILL-INDEX}.md + playbooks  # condensed, self-contained
 ├── agents/                      # subagents (ca-planner/debugger/verifier/structure-auditor + workers)
 ├── hooks/                       # ca-session-start + ca-git-guard (+ hooks.json)
-├── bridge/ROUTER.md             # optional sb / unabridged handoffs
 ├── tests/                       # ca-tools.test.js, structural-eval.js, eval/ (LLM-graded)
 ├── .claude-plugin/plugin.json   # plugin manifest
 └── commands/                    # thin multi-level slash commands

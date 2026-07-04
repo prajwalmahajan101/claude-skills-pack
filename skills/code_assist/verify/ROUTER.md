@@ -40,4 +40,4 @@ checks: run inline.
 - Re-run the project's full test + lint + type check if the change is non-trivial.
 - Prefer end-to-end/integration evidence over asserting from reading the diff.
 
-> **Bridge:** on a proven result, offer `/sb:lesson "<title>"` to capture the takeaway (when `sb` is installed). See `bridge/ROUTER.md`.
+> **Note:** capture a proven result as a lesson tagged `risk` so `recall` can reuse the evidence next time.
