@@ -75,6 +75,11 @@ Bodies live in [`docs/adr/`](./docs/adr/); this is the index only.
 Before a non-trivial architectural change (new member, schema change, registry model, bridge seam),
 read the relevant ADR; if the decision isn't recorded, draft a new one as part of the plan.
 
+## Known issues
+
+Open audit-surfaced defects (not yet fixed) live in [`docs/KNOWN_ISSUES.md`](./docs/KNOWN_ISSUES.md).
+Check it before touching sutra's review parsers or sb's frontmatter/vault-repair paths.
+
 ## Gotchas
 
 - **Versions are per-plugin** (`skills/<plugin>/.claude-plugin/plugin.json`) and also mirrored in
