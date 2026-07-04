@@ -24,13 +24,22 @@ function readEvents(file, fromByte = 0) {
   const buf = Buffer.alloc(len);
   fs.readSync(fd, buf, 0, len, fromByte);
   fs.closeSync(fd);
-  const text = buf.toString("utf8");
+
+  // Only consume through the LAST newline in this window. A trailing partial line
+  // (the writer flushed mid-record, or the read boundary split a record) is left
+  // unconsumed so it is re-read whole on the next call — otherwise its bytes would
+  // be marked read and the completed record lost. Slicing on a '\n' byte is also
+  // UTF-8-safe: a multibyte codepoint never contains 0x0a, so we never cut one.
+  const lastNl = buf.lastIndexOf(0x0a);
+  if (lastNl === -1) return { events: [], size: fromByte };
+  const text = buf.slice(0, lastNl + 1).toString("utf8");
+
   const events = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     try { events.push(JSON.parse(line)); } catch { /* skip malformed */ }
   }
-  return { events, size: stat.size };
+  return { events, size: fromByte + lastNl + 1 };
 }
 
 // Extract a simple "turn" stream from raw events.
