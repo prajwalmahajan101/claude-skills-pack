@@ -1,0 +1,42 @@
+{
+  "_comment": "Declarative member registry for the sutra orchestrator. sutra reads this to know which pack members exist, what each can do, and which artifact types flow between them. Members NEVER reference each other — all cross-plugin knowledge lives here. Adding a member to the pack = adding an entry here (plus wrapper commands).",
+  "schemaVersion": 1,
+  "members": [
+    {
+      "id": "code_assist",
+      "role": "developer-workflow",
+      "cli": "bin/ca-tools.js",
+      "commandPrefix": "code_assist",
+      "capabilities": [
+        "commit", "review", "journal", "plan", "debug", "verify", "adr",
+        "release", "onboard", "structure", "incident", "refactor", "format",
+        "github", "track", "notify", "scan", "graph", "test", "secure",
+        "recall-base", "domains", "flow"
+      ],
+      "produces": ["journal", "adr", "review"],
+      "consumes": []
+    },
+    {
+      "id": "sb",
+      "role": "second-brain",
+      "cli": "commands/_runners",
+      "commandPrefix": "sb",
+      "capabilities": [
+        "capture", "lesson", "topic", "kanban", "tasks", "task", "connect",
+        "tag", "search", "project", "decision", "recall-vault", "health",
+        "distill", "emerge", "idea", "insights"
+      ],
+      "produces": ["lesson"],
+      "consumes": ["journal", "adr", "review"]
+    },
+    {
+      "id": "unabridged",
+      "role": "output-discipline",
+      "cli": null,
+      "commandPrefix": null,
+      "capabilities": ["no-truncation"],
+      "produces": [],
+      "consumes": []
+    }
+  ]
+}

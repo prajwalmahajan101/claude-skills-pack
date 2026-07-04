@@ -1,0 +1,12 @@
+{
+  "_comment": "Merge into <CLAUDE_DIR>/settings.json under 'hooks' (default CLAUDE_DIR=~/.claude). install.sh substitutes $CLAUDE_DIR and merges idempotently with jq. The hook lives under the symlinked skill dir and honors SUTRA_DISABLE=1.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"$CLAUDE_DIR/skills/sutra/hooks/sutra-session-start.js\"", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}
