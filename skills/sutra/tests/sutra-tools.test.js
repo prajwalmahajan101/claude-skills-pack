@@ -230,9 +230,11 @@ test("recall returns empty (never fabricates) when no members are present", () =
 });
 
 test("loop-emit appends a durable feedback event", () => {
-  const repo = tmp();
-  const res = withSkills(fakeSkills({ sb: "0.9.1" }), () => sutra.loopEmit(["--event", "verify", "--note", "tests pass", "--risk"]));
-  // repo defaults to "." → resolve against the process cwd; pin via --dir instead:
+  // Always pin --dir to a tmp dir so the test never writes into the real repo.
+  const repo = tmp(), repo2 = tmp();
+  const res = withSkills(fakeSkills({ sb: "0.9.1" }), () => sutra.loopEmit(["--event", "verify", "--note", "tests pass", "--risk", "--dir", repo2]));
+  assert.equal(res.ok, true, "risk event logged");
+  assert.notEqual(res.suggest, null, "sb present → promote suggestion");
   const res2 = withSkills(fakeSkills({}), () => sutra.loopEmit(["--event", "incident", "--note", "outage", "--dir", repo]));
   assert.equal(res2.ok, true);
   assert.ok(fs.existsSync(res2.logged));
@@ -242,5 +244,4 @@ test("loop-emit appends a durable feedback event", () => {
   assert.equal(last.note, "outage");
   assert.ok(last.ts, "timestamped");
   assert.equal(res2.suggest, null, "no sb → no promote suggestion");
-  assert.equal(res.ok, true, "risk event logged too");
 });
