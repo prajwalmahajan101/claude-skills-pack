@@ -24,13 +24,13 @@ This reports each member's `present` / `version` / `capabilities`. Every bridge 
 
 ## Step 2 — route the request to a /sutra:* command
 
-The command surface mirrors the members' capabilities under one namespace. Three tiers:
+The command surface mirrors the members' capabilities under one namespace. Two tiers (see
+`commands/_manifest.json`):
 
 | Tier | Commands | What sutra adds |
 |---|---|---|
-| **Bridged** | `commit review journal plan debug verify adr incident release onboard flow` | pre-`recall` context, post artifact→vault `sync`, `loop-emit`, offer `lesson`, unabridged discipline on full-output steps |
-| **Knowledge** | `capture recall sync kanban tasks topic health decision` | code_assist-artifact fusion into the vault |
-| **Pass-through** | every other member command (`format github graph notify scan structure* refactor test track secure* search backfill …`) | uniform delegation to the member; full-surface parity |
+| **Composed (Tier-1)** | `do recall sync capture review commit verify` | hand-tuned composed flows: pre-`recall` context, `graph` impact, post artifact→vault `sync`, `loop-emit`, offer `lesson`, unabridged discipline on full-output steps (`do` is the catch-all agent) |
+| **Pass-through** | every other member command (`journal plan debug adr incident release onboard flow structure* refactor test format github graph notify scan track secure* kanban tasks topic search connect distill emerge health decision …`) | reachable via `/sutra:do` (the agent composes bridges automatically) or the member's own `/<member>:<command>` namespace |
 
 `/sutra:*` is the **canonical, recommended** surface when the full pack is installed. It does not hide
 the members' own `/code_assist:*` and `/sb:*` namespaces — those remain for standalone use.
