@@ -19,6 +19,56 @@ See [`docs/PLAN.md`](./docs/PLAN.md) for the original design and [`docs/PHASE9_P
 
 ---
 
+## Maintenance & self-healing
+
+The importer defends the vault against the failure modes that used to pollute it, and ships
+two idempotent maintenance scripts (both **dry-run by default**; pass `--apply` to write).
+
+**Capture hardening (automatic, in `backfill`):**
+
+- **No junk scopes.** `projectSlugFromCwd` routes scratch/system/dotfolder cwds
+  (`/tmp`, `downloads`, `.claude`, …) to a single `_unsorted` scope instead of
+  manufacturing a folder per stray cwd. Real projects and `~` are preserved; an
+  alias file (`_meta/project-aliases.json`) overrides any path.
+- **No self-capture.** Sessions that are sb's own headless `claude -p` sub-invocations
+  (analyzer/summarizer/miner) are detected by prompt signature + scratch-cwd + low
+  turn-count and skipped, along with `<2`-turn init-only stubs.
+- **Readable names + links.** Notes are written as `YYYY-MM-DD--<sid8>.md` with a title
+  derived from the first user turn, auto-tagged, registered as a `[[backlink]]` under
+  their project `INDEX.md`, and given a top-3 `## Related` section.
+
+**Maintenance scripts:**
+
+```bash
+node ~/.claude/skills/sb/bin/sb-vault-repair.js          # dry-run: report
+node ~/.claude/skills/sb/bin/sb-vault-repair.js --apply  # purge self-capture, merge junk
+                                                         # scopes → _unsorted, delete empty
+                                                         # folders, rename + wire linkage
+node ~/.claude/skills/sb/bin/sb-connect-projects.js --apply  # link plans/*.md + lessons.md
+                                                            # into each project INDEX
+```
+
+`sb-vault-repair.js` is safe to re-run (a second pass reports "purged 0, moved 0") and prints a
+`cp -r` snapshot command before `--apply`. Shared classification/naming logic lives in
+`lib/import-helpers.js` so the live importer and the repair script never disagree.
+
+## Auto lesson-mining (optional hook)
+
+`hooks/lesson-miner-trigger.js` (SessionStart) spawns `hooks/lesson-miner.js` **detached** so it
+never blocks startup. Per run it picks the most-recent finished, `≥15`-turn, un-mined conversation,
+runs one `claude -p` (Haiku) to extract 0–3 durable lessons, and appends them to
+`~/.claude/lessons/` + `INDEX.md`, marking the session mined. Guards: recursion guard
+(`LESSON_MINER=1`), kill switch (`LESSON_MINER_DISABLE=1` / `SB_DISABLE=1`), 1-session/run cap,
+and all-failures-exit-0. Knobs: `LESSON_MINER_MIN_TURNS`, `LESSON_MINER_MAX`, `LESSON_MINER_MODEL`.
+
+Wire it by adding to `~/.claude/settings.json` → `hooks.SessionStart`:
+
+```json
+{ "hooks": [ { "type": "command", "command": "node \"$HOME/.claude/hooks/lesson-miner-trigger.js\"", "timeout": 5 } ] }
+```
+
+---
+
 ## Prerequisites
 
 | Requirement | Why | How to get it |

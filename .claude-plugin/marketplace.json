@@ -17,8 +17,8 @@
     {
       "name": "sb",
       "source": "./skills/sb",
-      "description": "Second-brain — captures conversations into a project-scoped Obsidian vault; lessons, tasks, kanban, connections. Ingests code_assist journals/ADRs/reviews.",
-      "version": "0.9.0",
+      "description": "Second-brain — captures conversations into a project-scoped Obsidian vault; lessons, tasks, kanban, connections. Self-healing vault-repair + linkage maintenance and optional auto lesson-mining. Ingests code_assist journals/ADRs/reviews.",
+      "version": "0.9.1",
       "category": "knowledge",
       "keywords": ["second-brain", "obsidian", "notes", "memory"]
     },
