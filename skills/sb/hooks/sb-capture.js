@@ -10,7 +10,7 @@ const path = require("node:path");
 const os = require("node:os");
 
 const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
-const { ensureDirs, projectSlugFromCwd, readSessionMap, writeSessionMap, paths, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
+const { ensureDirs, projectSlugFromCwd, readSessionMap, updateSessionMap, paths, markSessionEnded } = require(path.join(SKILL_LIB, "vault.js"));
 const { sessionFilePath, readEvents, toTurns } = require(path.join(SKILL_LIB, "jsonl.js"));
 const { fm, renderTurns, parseFrontmatter, writeConversation, updateFrontmatter } = require(path.join(SKILL_LIB, "markdown.js"));
 
@@ -49,9 +49,8 @@ async function main() {
 
   const { metadata, turns } = toTurns(events);
   if (turns.length === 0) {
-    prev.byteOffset = size;
-    map[sessionId] = prev;
-    writeSessionMap(map);
+    // Advance the offset under the lock so a concurrent writer isn't clobbered.
+    updateSessionMap((m) => { const cur = m[sessionId] || prev; cur.byteOffset = size; m[sessionId] = cur; });
     return;
   }
 
@@ -107,19 +106,25 @@ async function main() {
     });
   }
 
-  map[sessionId] = {
-    ...prev,
-    file,
-    project: slug,
-    byteOffset: size,
-    turnCount: (prev.turnCount || 0) + turns.length,
-    lastWriteAt: new Date().toISOString(),
-    status: prev.status === "ended" ? "ended" : "active",
-  };
-  writeSessionMap(map);
+  // Commit the offset/turnCount/file update under the lock, merging onto the
+  // latest map so a concurrent session's write (different key) isn't dropped.
+  let finalStatus = "active";
+  updateSessionMap((m) => {
+    const cur = m[sessionId] || prev;
+    finalStatus = cur.status === "ended" ? "ended" : "active";
+    m[sessionId] = {
+      ...cur,
+      file,
+      project: slug,
+      byteOffset: size,
+      turnCount: (prev.turnCount || 0) + turns.length,
+      lastWriteAt: new Date().toISOString(),
+      status: finalStatus,
+    };
+  });
 
   // Mark as in-progress (unless already terminal) so a crashed session is detectable later.
-  if (map[sessionId].status !== "ended") {
+  if (finalStatus !== "ended") {
     markSessionEnded(sessionId, "in-progress");
   }
 }
