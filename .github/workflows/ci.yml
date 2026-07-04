@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["18", "20"]
+    name: node ${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Every JS file must at least parse. Fails the job on the first syntax error.
+      - name: node --check sweep
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r f; do
+            node --check "$f" || { echo "syntax error: $f"; fail=1; }
+          done < <(find skills -name '*.js' -not -path '*/node_modules/*')
+          exit "$fail"
+
+      # Zero-dep node:test suites across every plugin.
+      - name: unit + contract tests
+        run: |
+          set -euo pipefail
+          node --test skills/code_assist/tests/ca-tools.test.js
+          node --test skills/sutra/tests/sutra-tools.test.js
+          node --test skills/sb/tests/ingest.test.js
+
+      # Standalone structural eval (asserts the code_assist skill tree is consistent).
+      - name: structural eval
+        run: node skills/code_assist/tests/structural-eval.js
+
+      # The pack's own committed artifacts (ADRs, journals, reviews) must conform to
+      # sutra's interchange schema. --exit-code makes a violation fail the job.
+      # (Fixture conformance is covered separately by the sutra test suite.)
+      - name: sutra schema-check
+        run: node skills/sutra/bin/sutra-tools.js schema-check . --exit-code
+
+      # Independence invariant: each standalone member (code_assist, sb, unabridged)
+      # must never reference a sibling — or the orchestrator — by filesystem path.
+      # Only sutra is allowed to reach into members. Tests are exempt (they may drive
+      # a sibling to exercise a cross-member contract).
+      - name: independence gate
+        run: |
+          set -uo pipefail
+          viol=0
+          for m in code_assist sb unabridged; do
+            for s in code_assist sb unabridged sutra; do
+              [ "$m" = "$s" ] && continue
+              hits=$(grep -RnE "skills/$s\b|\.claude/skills/$s\b" "skills/$m" \
+                       --include='*.js' --include='*.md' --include='*.json' \
+                       --exclude-dir=tests 2>/dev/null || true)
+              if [ -n "$hits" ]; then
+                echo "VIOLATION: member '$m' references '$s' by path:"
+                echo "$hits"
+                viol=1
+              fi
+            done
+          done
+          [ "$viol" = "0" ] && echo "independence OK: no member references a sibling by path"
+          exit "$viol"
