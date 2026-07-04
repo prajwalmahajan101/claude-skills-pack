@@ -1,19 +1,29 @@
 # claude-skills-pack
 
-A personal bundle of three [Claude Code](https://claude.com/claude-code) skills, each independently
-installable - and, together, a **plugin marketplace** (`.claude-plugin/marketplace.json`).
+A personal bundle of three fully-standalone [Claude Code](https://claude.com/claude-code) skills plus
+an optional orchestrator that composes them - each independently installable, and together a **plugin
+marketplace** (`.claude-plugin/marketplace.json`).
 
 | Skill | What it does | Slash commands | Agents | Hooks |
 |---|---|---|---|---|
-| [**sb**](./skills/sb) | Persistent second-brain - captures every Claude Code conversation into an Obsidian vault, analyzes them into lessons, kanban tasks, topics, and cross-project connections. **Self-healing:** idempotent vault-repair + project-linkage maintenance scripts and an optional auto lesson-mining hook. | 22 (`/sb:*`) | 0 | 5 + 2 (opt) |
-| [**code_assist**](./skills/code_assist) | Developer-workflow powerhouse - atomic commits, stack-aware code review, journals, plan/debug/verify/ADR discipline, structure/release/onboard/refactor, **secure** (secret-scan + installable git-hooks), **incident** (hotfix + postmortem), github/jira/slack/sonar/graph integrations, and a **bidirectional memory bridge** (recall past lessons/risks). Zero-dep CLI + self-tests + subagents. | 37 (`/code_assist:*`) | 7 | 2 |
+| [**sb**](./skills/sb) | Persistent second-brain - captures every Claude Code conversation into an Obsidian vault, analyzes them into lessons, kanban tasks, topics, and cross-project connections. **Self-healing:** idempotent vault-repair + project-linkage maintenance and an optional auto lesson-mining hook. Holds knowledge via a generic `ingest` primitive (fully standalone). | `/sb:*` | 0 | 5 + 2 (opt) |
+| [**code_assist**](./skills/code_assist) | Developer-workflow powerhouse - atomic commits, stack-aware code review (**blast-radius-grounded** via `graph review-prep`), journals, plan/debug/verify/ADR discipline, structure/release/onboard/refactor, **secure** (secret-scan + installable git-hooks), **incident** (hotfix + postmortem), github/jira/slack/sonar/graph integrations. Fully standalone. Zero-dep CLI + self-tests + subagents. | 37 (`/code_assist:*`) | 7 | 2 |
 | [**unabridged**](./skills/unabridged) | Forces complete, untruncated output. No `// ...`, no "for brevity", no skeleton responses. | 0 (context skill) | 0 | 0 |
+| [**sutra**](./skills/sutra) | **Orchestrator** - composes the three members behind one unified `/sutra:*` surface (and a `/sutra:do` general agent). Owns the capability registry, artifact interchange schema, cross-plugin recall, and the verify→lesson→recall feedback loop. Members stay standalone without it. | `/sutra:*` | 1 | 1 |
+
+## Two ways to use the pack
+
+1. **À la carte** - install any member(s) and use their own namespaces (`/code_assist:*`, `/sb:*`).
+   Maximum isolation; no cross-plugin behavior. Removing a member never breaks another.
+2. **Full pack** - also install **sutra**. Now `/sutra:commit` commits *and* journals *and* offers to
+   capture a lesson; `/sutra:review` recalls prior risks and grounds severity in the call graph, then
+   syncs to the vault; `/sutra:do <anything>` routes any request across the whole ecosystem.
 
 ## As a plugin marketplace
 
 ```bash
 claude plugin marketplace add <path-or-url-to-this-repo>
-/plugin install code_assist@claude-skills-pack   # or sb@ / unabridged@
+/plugin install code_assist@claude-skills-pack   # or sb@ / unabridged@ / sutra@
 ```
 
 `./install.sh --all` also registers the marketplace; `./install.sh --marketplace` registers it
@@ -58,18 +68,19 @@ Zero npm dependencies - all runtime code uses Node built-ins.
 ```
 claude-skills-pack/
 ├── .claude-plugin/
-│   └── marketplace.json  # lists the 3 plugins (sb, code_assist, unabridged)
+│   └── marketplace.json  # lists the 4 plugins (sb, code_assist, unabridged, sutra)
 ├── install.sh            # top-level selector + marketplace registration
 ├── uninstall.sh
 ├── skills/
 │   ├── sb/               # self-contained: SKILL.md, lib/, commands/, hooks/, install.sh, README.md
-│   ├── code_assist/      # SKILL.md + families/ + agents/ + hooks/ + bridge/ + tests/ + .claude-plugin/
-│   └── unabridged/       # SKILL.md + code/ + prose/ + continuation/ + EXAMPLES.md
+│   ├── code_assist/      # SKILL.md + families/ + agents/ + hooks/ + tests/ + .claude-plugin/
+│   ├── unabridged/       # SKILL.md + code/ + prose/ + continuation/ + EXAMPLES.md
+│   └── sutra/            # SKILL.md + registry/ + schema/ + bridge/ + loop/ + commands/ + agents/ + tests/
 └── docs/
     └── adr/              # architecture decision records
 ```
 
-Each skill lives under `skills/<name>/` with its own `SKILL.md`, `README.md`, and `install.sh`. You can copy any one of them into another repo and ship it standalone - they share no code.
+Each member skill lives under `skills/<name>/` with its own `SKILL.md`, `README.md`, and `install.sh`. The three members share **no code** and no cross-references - you can copy any one into another repo and ship it standalone. `sutra` is the optional layer that composes them.
 
 ## Uninstall
 
@@ -84,8 +95,9 @@ For `sb` specifically, your Obsidian vault is never touched - only the symlinks 
 ## Per-skill READMEs
 
 - [`skills/sb/README.md`](./skills/sb/README.md) - vault layout, slash command reference, configuration knobs
-- [`skills/code_assist/README.md`](./skills/code_assist/README.md) - family routing, backbone CLI, agents, hooks, tests, bridge, plugin usage
+- [`skills/code_assist/README.md`](./skills/code_assist/README.md) - family routing, backbone CLI, agents, hooks, tests, plugin usage
 - [`skills/unabridged/README.md`](./skills/unabridged/README.md) - trigger phrases, sub-skill anatomy, examples
+- [`skills/sutra/README.md`](./skills/sutra/README.md) - orchestrator: registry, interchange schema, bridges, unified surface
 
 ## License
 
