@@ -13,7 +13,7 @@ const os = require("node:os");
 
 const SKILL_LIB = path.join(os.homedir(), ".claude", "skills", "sb", "lib");
 const { VAULT, DIR, paths, projectSlugFromCwd, readSessionMap } = require(path.join(SKILL_LIB, "vault.js"));
-const { repoRoot } = require(path.join(SKILL_LIB, "repo-artifacts.js"));
+const { repoRoot } = require(path.join(SKILL_LIB, "git.js"));
 
 const sub = process.argv[2];
 const opts = parseFlags(process.argv.slice(3));
