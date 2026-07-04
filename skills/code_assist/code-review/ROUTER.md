@@ -16,6 +16,9 @@ checklist (treat security findings as blocking, style as informational):
 - `node bin/ca-tools.js scan sonar` - SonarQube open issues (needs `SONAR_*` env; no-op otherwise).
 - `node bin/ca-tools.js graph detect-changes` / `graph impact <symbol>` - map the diff to
   affected symbols/flows and size blast radius (needs gitnexus; skip if absent).
+- `node bin/ca-tools.js recall --context "<changed area / feature>" --kinds risks,lessons` -
+  known **risks** and past lessons for this area; check the diff against each risk `ref` (a
+  previously-recorded regression is a prime thing to re-flag).
 
 These are inputs, not a replacement for the architectural review.
 

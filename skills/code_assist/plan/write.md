@@ -9,6 +9,11 @@ type: skill
 Goal: produce `.code_assist/.plan/<slug>.md` following `shared.md`'s structure, then request
 approval. This is the gate before execution.
 
+## Prior knowledge (from memory)
+`node bin/ca-tools.js recall --context "<the initiative>" --limit 5` - fold relevant lessons into
+the Approach and seed the **Risks / open questions** section with any risk `ref`s it returns
+(don't rediscover a known pitfall). Proceed if nothing relevant.
+
 ## Steps (one todo each)
 1. **Context** - capture why this exists (problem, trigger, intended outcome).
 2. **Approach** - the single recommended approach; reference concrete files/functions to

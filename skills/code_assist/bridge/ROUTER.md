@@ -1,20 +1,47 @@
 ---
 name: code_assist/bridge/ROUTER
-description: Documents how code_assist hands off to its sibling skills (sb second-brain, unabridged complete-output) when they are installed. All handoffs are optional - code_assist is fully self-contained without them.
+description: Documents the BIDIRECTIONAL bridge between code_assist and its siblings - it writes artifacts OUT to sb and pulls lessons/memory/risks BACK to inform responses, and defers to unabridged for complete output. All handoffs are optional; code_assist is fully self-contained without them.
 type: router
 ---
 
 # Bridge Router
 
-code_assist is self-contained. When its sibling skills from the same pack are installed, three
-handoffs make the whole `claude-skills-pack` cooperate. Detect what is present first:
+code_assist is self-contained. When its sibling skills from the same pack are installed, the whole
+`claude-skills-pack` cooperates - and the flow runs **both ways**. Detect what is present first:
 
 ```
 node ~/.claude/skills/code_assist/bin/ca-tools.js bridge status
 ```
 
-This reports `siblings.{sb,unabridged}` (bool) and a one-line handoff description for each. Every
-handoff below is a no-op when its sibling is absent - never a hard dependency.
+This reports `siblings.{sb,unabridged}` (bool), each write-out handoff, and the `pull` (reverse)
+channel with its source counts. Every handoff below is a no-op when its sibling/store is absent -
+never a hard dependency.
+
+## Handoff 0 - sb / memory → code_assist (pull-back: reason WITH prior knowledge)
+
+**This is the reverse channel.** Before designing, debugging, reviewing, or verifying, families
+pull relevant accumulated knowledge so the pack reasons *with* what it already learned:
+
+```
+node bin/ca-tools.js recall --context "<the task / symptom / area>" --limit 5
+```
+
+`recall` reads three stores **directly** (self-contained - works with sb absent): global lessons
+(`~/.claude/lessons/`), the project's harness `MEMORY.md`, and `~/.remember/recent.md`. When sb is
+installed it also fuses sb's verbatim vault highlights. Every returned item carries a `ref`
+(file:line) - **cite it; never paraphrase a lesson into a claim it doesn't make.**
+
+| Consumer | Context it recalls | How it uses it |
+|---|---|---|
+| `plan` (brainstorm/write) | the initiative | fold lessons into options; seed Risks from risk `ref`s |
+| `debug` | the symptom | past root-cause / risk as a *lead to test* (Iron Law still holds) |
+| `code_review` | the changed area | re-flag known risks / prior regressions |
+| `verify` | the goal | reuse what evidence mattered before |
+| `SessionStart` hook | repo name + branch | surface up to 2 repo-scoped **risks** at orientation |
+
+**The closed loop:** `verify`/`plan` completion and `incident` postmortems emit sb lessons (some
+tagged `risk`) → those are exactly what `recall` surfaces next time. Writing out *feeds* the
+pull-back. `bridge status` reports `pull.available` + per-store counts so the channel is observable.
 
 ## Handoff 1 - code_assist → sb (artifacts into the vault)
 
@@ -49,10 +76,10 @@ its own `structural-eval` placeholder check - the guarantee holds, just without 
 
 ## Handoff 3 - hooks & state (already deterministic)
 
-The `SessionStart` hook surfaces `.code_assist/STATE.md` "Now" + the structure score; the
-`PreToolUse` git-guard enforces `_shared/conventions.md`. These are code_assist-internal (no
-sibling needed) but compose cleanly with sb's own session hooks - both are gated by their own
-`*_DISABLE` env var so neither blocks the other.
+The `SessionStart` hook surfaces `.code_assist/STATE.md` "Now" + the structure score + up to 2
+repo-scoped risks (via `recall`); the `PreToolUse` git-guard enforces `_shared/conventions.md`.
+These are code_assist-internal (no sibling needed) but compose cleanly with sb's own session hooks
+- both are gated by their own `*_DISABLE` env var so neither blocks the other.
 
 ## Rule
 

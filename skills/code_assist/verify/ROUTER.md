@@ -9,6 +9,11 @@ type: router
 Load `_shared/discipline.md` (Iron Law #3: no completion claim without fresh verification).
 Single-purpose family - no sub-variants.
 
+## Prior knowledge (from memory)
+`node bin/ca-tools.js recall --context "<the goal>" --limit 5` - reuse how a similar change was
+proven before (the evidence that mattered) and re-check any risk `ref` this touches. Evidence is
+still produced fresh this turn; recall only tells you *what* to prove.
+
 ## What "verified" means
 Evidence produced **in this turn**: a command you just ran, output you can quote, a test
 that passed, the app behaving correctly. Not "it should work", not a prior run, not

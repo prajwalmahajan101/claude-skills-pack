@@ -9,6 +9,12 @@ type: skill
 Goal: turn a fuzzy request into a clear, agreed direction. No code, no file edits (beyond
 scratch notes in `.code_assist/.plan/`).
 
+## Prior knowledge (from memory)
+Before exploring, pull what the pack already learned so you design WITH it, not around it:
+`node bin/ca-tools.js recall --context "<the initiative in a few words>" --limit 5`. Lead with any
+**risks** it returns (approaches to avoid, past regressions), fold relevant lessons into the
+options, and cite the `ref` when you lean on one. If nothing relevant returns, proceed.
+
 ## Steps (one todo each)
 1. **Restate the intent** in your own words; confirm the real problem and the desired
    outcome. If the ask is a solution, dig for the underlying need.

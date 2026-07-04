@@ -134,3 +134,71 @@ test("CLI dispatch emits valid JSON for version", () => {
   const j = JSON.parse(r.stdout);
   assert.equal(j.name, "ca-tools");
 });
+
+// --- reverse bridge (recall) -------------------------------------------------
+function seedStores() {
+  const d = tmp();
+  fs.mkdirSync(path.join(d, "lessons"));
+  fs.mkdirSync(path.join(d, "mem"));
+  fs.mkdirSync(path.join(d, "remember"));
+  fs.writeFileSync(path.join(d, "lessons", "INDEX.md"),
+    "# Lessons\n\n- `x.md` — [risk] Never commit AWS keys; use env vars and rotate on leak\n" +
+    "- `y.md` — [tooling] pytest fixtures for database isolation\n");
+  fs.writeFileSync(path.join(d, "mem", "MEMORY.md"),
+    "# MEMORY\n\n- [Git rules](g.md) — no commits to main; conventional commits; rebase merge\n");
+  fs.writeFileSync(path.join(d, "remember", "recent.md"), "# Recent\n\n- built the recall subcommand today\n");
+  return d;
+}
+function withStores(d, fn) {
+  const saved = { l: process.env.CA_LESSONS_DIR, m: process.env.CA_MEMORY_DIR, r: process.env.CA_REMEMBER_DIR, s: process.env.CA_RECALL_SB };
+  process.env.CA_LESSONS_DIR = path.join(d, "lessons");
+  process.env.CA_MEMORY_DIR = path.join(d, "mem");
+  process.env.CA_REMEMBER_DIR = path.join(d, "remember");
+  process.env.CA_RECALL_SB = "0"; // deterministic: skip sb enrichment
+  try { return fn(); } finally {
+    saved.l === undefined ? delete process.env.CA_LESSONS_DIR : process.env.CA_LESSONS_DIR = saved.l;
+    saved.m === undefined ? delete process.env.CA_MEMORY_DIR : process.env.CA_MEMORY_DIR = saved.m;
+    saved.r === undefined ? delete process.env.CA_REMEMBER_DIR : process.env.CA_REMEMBER_DIR = saved.r;
+    saved.s === undefined ? delete process.env.CA_RECALL_SB : process.env.CA_RECALL_SB = saved.s;
+  }
+}
+
+test("recall surfaces relevant lessons + risks with provenance (tier-1, sb off)", () => {
+  const d = seedStores();
+  withStores(d, () => {
+    const r = ca.recall(["--context", "committing secrets to git", "--limit", "5"]);
+    assert.ok(r.lessons.length >= 1, "finds the secret-commit lesson");
+    assert.ok(r.risks.length >= 1, "flags it as a risk");
+    assert.match(r.risks[0].text, /Never commit AWS keys/);
+    const all = [...r.lessons, ...r.risks, ...r.memory];
+    assert.ok(all.every((x) => x.ref && /:\d+$/.test(x.ref)), "every item carries a file:line ref (provenance)");
+  });
+});
+
+test("recall ranks by relevance and never fabricates (irrelevant context → no forced hits)", () => {
+  const d = seedStores();
+  withStores(d, () => {
+    const r = ca.recall(["--context", "kubernetes helm chart rollout", "--limit", "5"]);
+    // none of the seeded items mention k8s — recall must not invent matches.
+    assert.equal(r.lessons.length, 0, "no lesson matches an unrelated context");
+    assert.equal(r.risks.length, 0);
+    assert.equal(r.sources.lessons, 2, "but the store was still read (2 lessons on disk)");
+  });
+});
+
+test("recall is bounded by --limit", () => {
+  const d = seedStores();
+  withStores(d, () => {
+    const r = ca.recall(["--context", "commit git secrets database pytest", "--limit", "1"]);
+    assert.ok(r.lessons.length <= 1, "respects --limit");
+  });
+});
+
+test("bridge status exposes the pull (reverse) channel", () => {
+  const d = seedStores();
+  withStores(d, () => {
+    const b = ca.bridge(["status"]);
+    assert.ok(b.pull && b.pull.available === true, "pull channel advertised");
+    assert.equal(b.pull.sources.lessons, 2);
+  });
+});
