@@ -12,15 +12,23 @@ CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
 SKILL_NAME="sutra"
 SKILL_LINK="$CLAUDE_DIR/skills/$SKILL_NAME"
 COMMANDS_DIR="$CLAUDE_DIR/commands/$SKILL_NAME"
+AGENTS_DIR="$CLAUDE_DIR/agents"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
 say()  { printf "\033[1;34m==>\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33mWARN:\033[0m %s\n" "$*"; }
 
-mkdir -p "$CLAUDE_DIR/skills" "$COMMANDS_DIR"
+mkdir -p "$CLAUDE_DIR/skills" "$COMMANDS_DIR" "$AGENTS_DIR"
 
 say "Linking skill → $SKILL_LINK"
 ln -sfn "$HERE" "$SKILL_LINK"
+
+if compgen -G "$HERE/agents/"'*.md' > /dev/null; then
+  say "Linking agents → $AGENTS_DIR"
+  for f in "$HERE/agents/"*.md; do
+    ln -sfn "$f" "$AGENTS_DIR/$(basename "$f")"
+  done
+fi
 
 if compgen -G "$HERE/commands/"'*.md' > /dev/null; then
   say "Linking slash commands → $COMMANDS_DIR"

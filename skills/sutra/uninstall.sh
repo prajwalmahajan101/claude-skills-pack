@@ -8,6 +8,7 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 
 rm -f "$CLAUDE_DIR/skills/$SKILL_NAME"
 rm -rf "$CLAUDE_DIR/commands/$SKILL_NAME"
+rm -f "$CLAUDE_DIR/agents/sutra-agent.md"
 
 # Strip sutra hook entry from settings.json (idempotent; same matcher as install).
 if command -v jq >/dev/null 2>&1 && [ -f "$SETTINGS" ]; then
