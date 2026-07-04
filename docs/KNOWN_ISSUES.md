@@ -12,18 +12,24 @@ hooks). The items below are the remaining lower-severity findings, tracked for a
 
 ## Open
 
-### M1 — pack: two hook-registration mechanisms can double-fire
+### M1 — pack: code_assist/sutra double-fire hooks (symlink install ships the manifest too)
 
-- **Where:** `skills/<plugin>/settings-snippet.json` (+ each `install.sh`) vs
-  `skills/<plugin>/.claude-plugin/plugin.json` → `hooks/hooks.json`
-- **Issue:** every plugin now wires its hooks two ways — a `~/.claude/settings.json` merge (symlink
-  installer) and the plugin manifest (`/plugin install`). The `strip_*` idempotency only dedupes
-  within settings.json; it is blind to the manifest registration. A user who runs **both** install
-  methods for the same skill double-registers its hooks, so they fire twice (e.g. `ca-git-guard`
-  runs twice per Bash call; capture writes twice). For v1.0.0 this is **documented** as pick-one in
-  the README, not yet structurally prevented.
-- **Fix:** make the plugin manifest the single canonical mechanism and have `install.sh` skip the
-  hook-settings merge when the skill is plugin-installed (or detect and dedupe across both).
+- **Where:** `skills/code_assist/install.sh` + `skills/sutra/install.sh` (`ln -sfn "$HERE"` symlink of
+  the whole skill dir) vs their `hooks/hooks.json`, plus the `settings-snippet.json` merge each runs.
+- **Issue:** `code_assist` and `sutra` **symlink** their entire skill dir into `~/.claude/skills/`, so
+  the plugin manifest `hooks/hooks.json` is *always* present and auto-registers (loaded as
+  `@skills-dir` plugins) — **and** each `install.sh` also merges the same hooks into
+  `~/.claude/settings.json`. Both registrations point at existing colocated scripts, so there is no
+  crash, but the hooks **fire twice** from `install.sh` alone (e.g. `ca-git-guard` runs twice per Bash
+  call; `sutra-session-start` twice). Unlike the sb crash, this needs no "ran both methods" mistake —
+  the symlink install self-double-registers. The `strip_*` idempotency only dedupes within
+  settings.json; it is blind to the manifest.
+- **Not affected:** `sb` — fixed in #10; its `install.sh` copies files (no manifest) and registers via
+  `settings.json` only. `unabridged` ships no `hooks/hooks.json`.
+- **Fix:** pick one canonical mechanism per install method. Either have `code_assist`/`sutra`
+  `install.sh` **skip the settings.json merge** (rely on the symlinked manifest, the plugin path), or
+  stop shipping the manifest to the symlink target and keep settings.json — mirroring the sb #10 fix.
+  Whichever is chosen, apply it consistently so a single install can't register a hook twice.
 
 ### L1 — sb: per-file lock never reaches its own stale-reclaim window
 
