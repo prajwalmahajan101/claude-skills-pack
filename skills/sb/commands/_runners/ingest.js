@@ -49,6 +49,13 @@ for (const n of notes) {
   if (!n || !n.name || !n.content) continue;
   const folder = safeSeg(n.folder || "notes");
   const dir = path.join(p.project, folder);
+  const target = path.join(dir, safeName(n.name));
+  // Defense in depth: never write outside the project dir, whatever the payload says.
+  const base = path.resolve(p.project) + path.sep;
+  if (!path.resolve(target).startsWith(base)) {
+    console.error(`ingest: skipped note escaping project dir: ${n.name}`);
+    continue;
+  }
   fs.mkdirSync(dir, { recursive: true });
   const front = fm({
     type: n.type || "note",
@@ -59,7 +66,7 @@ for (const n of notes) {
     "ai-first": true,
   });
   const body = preambleBlock(n.title || `${n.type || "note"} for ${slug}`) + "\n" + stripFrontmatter(n.content) + "\n";
-  fs.writeFileSync(path.join(dir, safeName(n.name)), front + body);
+  fs.writeFileSync(target, front + body);
   written++;
 }
 
@@ -95,8 +102,16 @@ function updateIndexIssues(indexFile, slug, issues) {
 function stripFrontmatter(content) {
   return content.startsWith("---\n") ? parseFrontmatter(content).body.replace(/^\s+/, "") : content;
 }
-function safeSeg(s) { return String(s).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "notes"; }
-function safeName(s) { return String(s).replace(/[\\/]+/g, "__").replace(/[^a-zA-Z0-9._-]+/g, "-") || "note.md"; }
+// Sanitize a path segment. Strips separators/odd chars AND rejects pure-dot
+// segments (".", "..", "…") so a payload can't traverse out of the project dir.
+function safeSeg(s) {
+  const seg = String(s).replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return !seg || /^\.+$/.test(seg) ? "notes" : seg;
+}
+function safeName(s) {
+  const n = String(s).replace(/[\\/]+/g, "__").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return !n || /^\.+$/.test(n) ? "note.md" : n;
+}
 function fail(m) { console.error(`ingest: ${m}`); process.exit(1); }
 function parseFlags(arr) {
   const out = { _: [] };

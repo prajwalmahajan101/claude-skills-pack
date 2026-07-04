@@ -107,6 +107,27 @@ test("ingest sanitizes folder + file names, preventing path traversal", () => {
   assert.ok(!fs.existsSync(path.join(vault, "02_Projects", "escape")), "no sibling beside the project dir");
 });
 
+test("ingest neutralizes bare '..' folder/name segments (no traversal above project)", () => {
+  // Bare ".." previously survived sanitization and escaped the project sandbox.
+  const { status, vault } = ingest({
+    project: "demo",
+    notes: [
+      { folder: "..", name: "pwned.md", type: "note", title: "t", content: "ESCAPE1" },
+      { folder: "../..", name: "..", type: "note", title: "t", content: "ESCAPE2" },
+    ],
+  });
+  assert.equal(status, 0);
+  // Nothing may land beside or above the project dir.
+  assert.ok(!fs.existsSync(path.join(vault, "02_Projects", "pwned.md")), "no escape to 02_Projects");
+  assert.ok(!fs.existsSync(path.join(vault, "pwned.md")), "no escape to vault root");
+  // No note content is written anywhere outside the project dir.
+  const projDir = projectDir(vault, "demo");
+  const outside = walk(vault)
+    .filter((f) => !f.startsWith(projDir + path.sep))
+    .filter((f) => { try { return /ESCAPE[12]/.test(fs.readFileSync(f, "utf8")); } catch { return false; } });
+  assert.deepEqual(outside, [], "no note content written outside the project dir");
+});
+
 function walk(dir) {
   const out = [];
   for (const e of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
