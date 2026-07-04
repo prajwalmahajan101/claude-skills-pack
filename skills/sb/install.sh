@@ -49,11 +49,19 @@ if [ -d "$HERE/bin" ]; then
   chmod +x "$SKILL_DIR/bin/"*.js 2>/dev/null || true
 fi
 
-# Plugin manifest — so the installed skill reports its version (sutra's registry
-# reads .claude-plugin/plugin.json) and carries its hooks manifest self-consistently.
-mkdir -p "$SKILL_DIR/.claude-plugin" "$SKILL_DIR/hooks"
+# Plugin manifest (version only) — so the installed skill reports its version
+# (sutra's registry reads .claude-plugin/plugin.json). We deliberately do NOT install
+# hooks/hooks.json here: this installer registers hooks via settings.json (step 5, the
+# single method), and the skill dir loads as a @skills-dir plugin whose manifest would
+# auto-register the SAME hooks a second time — a double-registration, and since the
+# sb-*.js scripts live in the flat ~/.claude/hooks (not the skill dir), the manifest's
+# ${CLAUDE_PLUGIN_ROOT}/hooks/*.js paths would not resolve → MODULE_NOT_FOUND. The
+# manifest stays in the repo for the /plugin install path, where scripts are colocated.
+mkdir -p "$SKILL_DIR/.claude-plugin"
 cp "$HERE/.claude-plugin/plugin.json" "$SKILL_DIR/.claude-plugin/plugin.json"
-cp "$HERE/hooks/hooks.json" "$SKILL_DIR/hooks/hooks.json" 2>/dev/null || true
+# Self-heal prior installs that copied the manifest into the skill dir (the crash source).
+rm -f "$SKILL_DIR/hooks/hooks.json"
+rmdir "$SKILL_DIR/hooks" 2>/dev/null || true
 
 # ─── 2. hooks ───────────────────────────────────────────────────────────────
 say "Installing hooks → $HOOKS_DIR"

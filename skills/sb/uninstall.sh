@@ -12,6 +12,7 @@ rm -f  "$CLAUDE_DIR/hooks/sb-plan-mirror.js"
 rm -f  "$CLAUDE_DIR/hooks/sb-session-start.js"
 rm -f  "$CLAUDE_DIR/hooks/sb-session-end.js"
 rm -f  "$CLAUDE_DIR/hooks/sb-prompt-watch.js"
+rm -f  "$CLAUDE_DIR/hooks/sb-validate.js"
 
 if command -v jq >/dev/null && [ -f "$CLAUDE_DIR/settings.json" ]; then
   echo "Stripping sb hook entries from settings.json…"
@@ -19,7 +20,7 @@ if command -v jq >/dev/null && [ -f "$CLAUDE_DIR/settings.json" ]; then
   jq '
     .hooks |= (
       to_entries |
-      map(.value |= map(.hooks |= map(select(.command | test("sb-(capture|plan-mirror|session-start|session-end|prompt-watch)\\.js") | not)) | select(.hooks | length > 0))) |
+      map(.value |= map(.hooks |= map(select(.command | test("sb-(capture|plan-mirror|session-start|session-end|prompt-watch|validate)\\.js") | not)) | select(.hooks | length > 0))) |
       map(select(.value | length > 0)) |
       from_entries
     )
