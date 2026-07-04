@@ -190,6 +190,42 @@ test("schema-check accepts an issue whose Severity/Priority is far below the hea
     "metadata past the old 7-line window is still found");
 });
 
+test("parseIssues ignores an ISSUE header inside a fenced code block (H2)", () => {
+  const block = "### ISSUE-001 — real\nSeverity: High · Priority: P1\n\n```\n### ISSUE-999 — snippet, not real\n```\n";
+  const issues = sutra.artifacts.parseIssues(block);
+  assert.deepEqual(issues.map((i) => i.id), ["ISSUE-001"], "fenced ISSUE-999 is a snippet, not a new issue");
+});
+
+test("checkReviews and parseIssues agree on the inline form (H1)", () => {
+  // An inline-form issues file must (a) be validated by conformance — not silently
+  // pass unchecked — and (b) surface the same issues that sync-artifacts ingests.
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  fs.writeFileSync(p, "# Issues\n\nISSUE-101 | High | P1 | broken login\nISSUE-102 | no-severity-here\n");
+  const res = sutra.schemaCheck(repo);
+  // ISSUE-102 lacks a valid Severity/Priority → conformance now catches it (before H1
+  // fix, checkReviews saw zero H3 headers and passed the file unvalidated).
+  assert.equal(res.ok, false, "inline issue missing metadata is a violation, not silently ok");
+  assert.ok(res.review.violations.some((v) => v.includes("ISSUE-102")));
+  assert.ok(!res.review.violations.some((v) => v.includes("ISSUE-101")), "well-formed inline issue conforms");
+  // The vault-ingest side sees the same two issues.
+  const ingested = sutra.artifacts.parseIssues(fs.readFileSync(p, "utf8")).map((i) => i.id);
+  assert.deepEqual(ingested, ["ISSUE-101", "ISSUE-102"], "conformance and ingest agree on the issue set");
+});
+
+test("schema-check ignores a fenced ISSUE header (no phantom violation) (H2)", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const p = path.join(repo, ".code_review", "code_review_issues.md");
+  // A real, conforming issue plus a fenced snippet that must NOT be treated as an
+  // issue missing metadata.
+  fs.writeFileSync(p,
+    "# Issues\n\n### ISSUE-201 — real\n\nSeverity: High · Priority: P1\n\n```md\n### ISSUE-999 — example in docs\n```\n");
+  const res = sutra.schemaCheck(repo);
+  assert.ok(!res.review.violations.some((v) => v.includes("ISSUE-999")),
+    "fenced ISSUE-999 does not fabricate a Severity/Priority violation");
+  assert.equal(res.review.violations.length, 0, "only real issues are checked");
+});
+
 test("schema-check is clean (not violating) when no artifacts exist", () => {
   const repo = tmp();
   const res = sutra.schemaCheck(repo);
