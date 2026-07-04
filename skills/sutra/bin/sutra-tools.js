@@ -393,17 +393,29 @@ function bridge(args) {
 // loop-emit — record a feedback event (verify/plan/incident outcome). The closed
 // loop: writing an outcome feeds the pull-back so recall surfaces it next time.
 // Durable, deterministic; the command layer offers to promote it to an sb lesson.
+// Resolve a repo root, reporting HOW it was found. `via:"git"` = a real repo
+// toplevel; `via:"cwd"` = no .git found, fell back to the resolved dir. Callers
+// that write (loop-emit) surface `via` so a non-repo write is observable, not
+// silent. The fallback is intentional (schema-check/sync run on non-git fixtures).
+function resolveRoot(dir) {
+  const a = artifacts.repoRoot(dir || ".");
+  if (a) return { root: a, via: "git" };
+  const r = sh("git", ["-C", dir || ".", "rev-parse", "--show-toplevel"]);
+  if (r.status === 0 && r.stdout) return { root: r.stdout, via: "git" };
+  return { root: path.resolve(dir || "."), via: "cwd" };
+}
+
 function loopEmit(args) {
   const f = flags(args);
   const event = f.event || f._[0];
   if (!event) return { ok: false, reason: "usage: loop-emit --event <verify|plan|incident|...> [--note <text>] [--risk]" };
-  const root = artifacts.repoRoot(f.dir || ".") || repoRoot(f.dir || ".");
+  const { root, via } = resolveRoot(f.dir || ".");
   const dir = path.join(root, ".sutra");
   fs.mkdirSync(dir, { recursive: true });
   const logFile = path.join(dir, "loop.jsonl");
   const entry = { ts: new Date().toISOString(), event, note: f.note || "", risk: !!f.risk };
   fs.appendFileSync(logFile, JSON.stringify(entry) + "\n");
-  return { ok: true, logged: logFile, entry, suggest: resolveMember("sb") ? "promote to /sutra:capture (sb lesson)" : null };
+  return { ok: true, logged: logFile, resolvedVia: via, entry, suggest: resolveMember("sb") ? "promote to /sutra:capture (sb lesson)" : null };
 }
 
 // ---------------------------------------------------------------------------
