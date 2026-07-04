@@ -84,3 +84,16 @@ test("updateFrontmatter refuses to stack a block on unterminated frontmatter (H4
   const out = fs.readFileSync(file, "utf8");
   assert.equal(out, original, "malformed note left untouched, not double-blocked");
 });
+
+test("updateFrontmatter writes atomically and leaves no lock/temp behind (H3 regression)", () => {
+  const dir = tmp();
+  const file = path.join(dir, "note.md");
+  fs.writeFileSync(file, "---\ntype: note\nturn_count: 3\nplans: []\n---\nbody\n");
+  md.updateFrontmatter(file, { status: "ended", turn_count: 5 });
+  const out = fs.readFileSync(file, "utf8");
+  assert.equal(out.match(/^---$/gm).length, 2, "exactly one frontmatter block");
+  assert.match(out, /turn_count: 5/, "field merged");
+  assert.match(out, /plans: \[\]/, "untouched field preserved (not clobbered)");
+  const leftovers = fs.readdirSync(dir).filter((n) => n.includes(".tmp") || n.endsWith(".lock"));
+  assert.deepEqual(leftovers, [], "no temp/lock files left behind (lock released, atomic rename)");
+});

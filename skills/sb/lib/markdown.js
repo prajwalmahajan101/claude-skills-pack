@@ -120,20 +120,53 @@ function appendConversation(filePath, header, body) {
   fs.appendFileSync(filePath, "\n" + header + "\n\n" + body);
 }
 
+// Zero-dep synchronous sleep for lock backoff (hooks are short-lived). Mirrors
+// vault.js's sleepMs; kept local so markdown.js stays a low-level, dependency-free module.
+function sleepMs(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch {}
+}
+
+// Run `fn` while holding an exclusive per-file lock. Acquires `<filePath>.lock` via
+// openSync(..,"wx") with 20ms backoff; a stale lock (crashed holder) is reclaimed
+// after 10s; if the lock can't be taken it proceeds best-effort unlocked (degrades to
+// prior behavior, never deadlocks). Mirrors vault.js:updateSessionMap.
+function withFileLock(filePath, fn) {
+  const lockPath = filePath + ".lock";
+  let fd = null;
+  for (let i = 0; i < 50; i++) {
+    try { fd = fs.openSync(lockPath, "wx"); break; }
+    catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      try { if (Date.now() - fs.statSync(lockPath).mtimeMs > 10000) fs.unlinkSync(lockPath); } catch {}
+      sleepMs(20);
+    }
+  }
+  try { return fn(); }
+  finally { if (fd !== null) { try { fs.closeSync(fd); } catch {} try { fs.unlinkSync(lockPath); } catch {} } }
+}
+
 function updateFrontmatter(filePath, updates) {
   if (!fs.existsSync(filePath)) return;
-  const content = fs.readFileSync(filePath, "utf8");
-  // Unterminated frontmatter (leading '---' with no closing '---'): parseFrontmatter
-  // returns the whole file as body, so writing fm()+body would stack a SECOND block
-  // and corrupt the note. Refuse rather than double it. (A valid empty '---\n---\n'
-  // has a closing delimiter and is handled normally.)
-  if (content.startsWith("---\n") && content.indexOf("\n---\n", 4) === -1) {
-    console.error(`sb: refusing to update malformed frontmatter (no closing '---'): ${filePath}`);
-    return;
-  }
-  const { meta, body } = parseFrontmatter(content);
-  const merged = { ...meta, ...updates };
-  fs.writeFileSync(filePath, fm(merged) + body);
+  // Three auto-firing hooks (sb-plan-mirror, sb-capture, markSessionEnded) mutate the
+  // same conversation file. Hold a per-file lock and re-read INSIDE it so a concurrent
+  // update is merged, not clobbered; write atomically via same-dir temp + rename so a
+  // crash mid-write never leaves a torn note.
+  return withFileLock(filePath, () => {
+    const content = fs.readFileSync(filePath, "utf8");
+    // Unterminated frontmatter (leading '---' with no closing '---'): parseFrontmatter
+    // returns the whole file as body, so writing fm()+body would stack a SECOND block
+    // and corrupt the note. Refuse rather than double it. (A valid empty '---\n---\n'
+    // has a closing delimiter and is handled normally.)
+    if (content.startsWith("---\n") && content.indexOf("\n---\n", 4) === -1) {
+      console.error(`sb: refusing to update malformed frontmatter (no closing '---'): ${filePath}`);
+      return;
+    }
+    const { meta, body } = parseFrontmatter(content);
+    const merged = { ...meta, ...updates };
+    const tmpFile = `${filePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpFile, fm(merged) + body);
+    fs.renameSync(tmpFile, filePath);
+  });
 }
 
 module.exports = {
