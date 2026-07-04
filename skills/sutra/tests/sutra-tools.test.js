@@ -229,6 +229,98 @@ test("recall returns empty (never fabricates) when no members are present", () =
   assert.deepEqual(res.risks, []);
 });
 
+test("recall composes from code_assist alone when sb is absent", () => {
+  const root = fakeSkills({ code_assist: "0.6.0" }); // sb absent
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"],
+    'process.stdout.write(JSON.stringify({lessons:[{text:"prefer rebase",ref:"L:1"}],risks:[],memory:[]}))');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "git"]));
+  assert.equal(res.sources.code_assist, true);
+  assert.equal(res.sources.sb, false);
+  assert.deepEqual(res.lessons.map((l) => l.text), ["prefer rebase"]);
+});
+
+test("recall composes from sb vault alone when code_assist is absent", () => {
+  const root = fakeSkills({ sb: "0.9.1" }); // code_assist absent
+  fakeMemberCli(root, "sb", ["commands", "_runners", "ask-highlights.js"],
+    'process.stdout.write("•  vault insight one\\n  — v:10\\n")');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "insight"]));
+  assert.equal(res.sources.code_assist, false);
+  assert.equal(res.sources.sb, true);
+  assert.deepEqual(res.lessons.map((l) => l.text), ["vault insight one"]);
+});
+
+test("bridge rejects a non-status subcommand with a usage error", () => {
+  const res = withSkills(fakeSkills({}), () => sutra.bridge(["frobnicate"]));
+  assert.equal(res.ok, false);
+  assert.match(res.reason, /usage: bridge <status>/);
+});
+
+test("loop-emit rejects a missing --event with a usage error", () => {
+  const res = withSkills(fakeSkills({}), () => sutra.loopEmit(["--note", "orphan"]));
+  assert.equal(res.ok, false);
+  assert.match(res.reason, /usage: loop-emit/);
+});
+
+test("resolveMember falls back to the dev-checkout sibling when not installed", () => {
+  // Point HOME at an empty temp home (no ~/.claude/skills) and unpin SUTRA_SKILLS_DIR
+  // so the installed lookup misses and the PACK_ROOT dev sibling is used instead.
+  const home = tmp();
+  const prevHome = process.env.HOME;
+  const prevPin = process.env.SUTRA_SKILLS_DIR;
+  process.env.HOME = home;
+  delete process.env.SUTRA_SKILLS_DIR;
+  try {
+    const r = sutra.resolveMember("sb");
+    assert.ok(r, "sb resolves from the repo checkout");
+    assert.equal(r.mode, "dev");
+    assert.equal(path.basename(r.dir), "sb");
+  } finally {
+    process.env.HOME = prevHome;
+    if (prevPin === undefined) delete process.env.SUTRA_SKILLS_DIR;
+    else process.env.SUTRA_SKILLS_DIR = prevPin;
+  }
+});
+
+test("memberVersion returns null for a malformed or version-less plugin.json", () => {
+  const bad = tmp();
+  fs.mkdirSync(path.join(bad, ".claude-plugin"), { recursive: true });
+  fs.writeFileSync(path.join(bad, ".claude-plugin", "plugin.json"), "{ not valid json");
+  assert.equal(sutra.memberVersion(bad), null, "unparseable plugin.json → null");
+
+  const noVer = tmp();
+  fs.mkdirSync(path.join(noVer, ".claude-plugin"), { recursive: true });
+  fs.writeFileSync(path.join(noVer, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "x" }));
+  assert.equal(sutra.memberVersion(noVer), null, "missing version field → null");
+});
+
+// --- payload↔ingest contract: sutra builds, sb's REAL ingest.js consumes -------
+// This is the seam that replaced the old bridge. sutra owns the mapping; sb owns
+// the write. If either side drifts (a renamed payload key, a changed note shape),
+// this test fails where a structural key-match test would silently pass.
+const SB_INGEST = path.join(__dirname, "..", "..", "sb", "commands", "_runners", "ingest.js");
+
+test("sync-artifacts payload feeds sb's ingest.js and lands notes + open issues", () => {
+  const repo = stageRepo(GOOD_FIXTURE);
+  const payload = withSkills(fakeSkills({ sb: "0.9.1" }), () => sutra.syncArtifacts(repo));
+  assert.ok(payload.notes.length > 0 && payload.project, "producer built a usable payload");
+
+  const payloadFile = path.join(tmp(), "payload.json");
+  fs.writeFileSync(payloadFile, JSON.stringify(payload));
+  const vault = tmp();
+  const r = cp.spawnSync("node", [SB_INGEST, "--payload", payloadFile], {
+    encoding: "utf8",
+    env: { ...process.env, SB_VAULT_PATH: vault },
+  });
+  assert.equal(r.status, 0, r.stderr);
+
+  const projDir = path.join(vault, "02_Projects", payload.project);
+  assert.ok(fs.existsSync(path.join(projDir, "journal")), "journal notes landed");
+  assert.ok(fs.existsSync(path.join(projDir, "decisions")), "decision notes landed");
+  const index = fs.readFileSync(path.join(projDir, "INDEX.md"), "utf8");
+  assert.match(index, /## Open review issues/, "open issues surfaced in the project index");
+  assert.match(index, new RegExp(`${payload.openIssues.length} open`), "issue count matches the payload");
+});
+
 test("loop-emit appends a durable feedback event", () => {
   // Always pin --dir to a tmp dir so the test never writes into the real repo.
   const repo = tmp(), repo2 = tmp();
