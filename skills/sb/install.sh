@@ -49,6 +49,12 @@ if [ -d "$HERE/bin" ]; then
   chmod +x "$SKILL_DIR/bin/"*.js 2>/dev/null || true
 fi
 
+# Plugin manifest — so the installed skill reports its version (sutra's registry
+# reads .claude-plugin/plugin.json) and carries its hooks manifest self-consistently.
+mkdir -p "$SKILL_DIR/.claude-plugin" "$SKILL_DIR/hooks"
+cp "$HERE/.claude-plugin/plugin.json" "$SKILL_DIR/.claude-plugin/plugin.json"
+cp "$HERE/hooks/hooks.json" "$SKILL_DIR/hooks/hooks.json" 2>/dev/null || true
+
 # ─── 2. hooks ───────────────────────────────────────────────────────────────
 say "Installing hooks → $HOOKS_DIR"
 mkdir -p "$HOOKS_DIR"
