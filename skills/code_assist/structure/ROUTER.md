@@ -35,6 +35,12 @@ After audit/scaffold, persist the profile:
 `node bin/ca-tools.js state-write --key structure_profile --value <python-service|go|...>`.
 `onboard`, `plan`, and the orchestrator consult it so all actions respect the structure.
 
+## Execution Mode - Agent Dispatch
+For a large or unfamiliar repo, delegate to the **`ca-structure-auditor`** subagent
+(`subagent_type: ca-structure-auditor`, pass `repo` + `mode`). It runs the audit + onboard-scan
+and returns a compact scaffold/fix plan without loading the repo into the main context. Applying
+the plan (scaffold/`git mv`) stays in the main session, after confirmation.
+
 ## Grounding
 `node bin/ca-tools.js structure-audit [dir]` and `structure-scaffold <dir> [--lang L] [--apply]`
 do the exact detection and file creation. The LLM decides which fixes are safe.
