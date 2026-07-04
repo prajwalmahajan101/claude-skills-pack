@@ -49,9 +49,13 @@ jobs:
         run: node skills/sutra/bin/sutra-tools.js schema-check . --exit-code
 
       # Independence invariant: each standalone member (code_assist, sb, unabridged)
-      # must never reference a sibling — or the orchestrator — by filesystem path.
-      # Only sutra is allowed to reach into members. Tests are exempt (they may drive
-      # a sibling to exercise a cross-member contract).
+      # must never reference a sibling — or the orchestrator — as code. Only sutra is
+      # allowed to reach into members. Tests are exempt (they may drive a sibling to
+      # exercise a cross-member contract). The gate catches three coupling shapes:
+      #   - an absolute-ish skills path:      skills/<sib>  |  .claude/skills/<sib>
+      #   - a relative climb into a sibling:  ../<sib>/  (require/spawn by relative path)
+      #   - a sibling's distinctive CLI:      ca-tools.js (code_assist) | sutra-tools.js
+      # Prose that merely names a sibling (no path, no CLI basename) does not match.
       - name: independence gate
         run: |
           set -uo pipefail
@@ -59,15 +63,20 @@ jobs:
           for m in code_assist sb unabridged; do
             for s in code_assist sb unabridged sutra; do
               [ "$m" = "$s" ] && continue
-              hits=$(grep -RnE "skills/$s\b|\.claude/skills/$s\b" "skills/$m" \
+              pat="skills/$s\b|\.claude/skills/$s\b|\.\./+$s/"
+              case "$s" in
+                code_assist) pat="$pat|\bca-tools\.js\b" ;;
+                sutra)       pat="$pat|\bsutra-tools\.js\b" ;;
+              esac
+              hits=$(grep -RnE "$pat" "skills/$m" \
                        --include='*.js' --include='*.md' --include='*.json' \
                        --exclude-dir=tests 2>/dev/null || true)
               if [ -n "$hits" ]; then
-                echo "VIOLATION: member '$m' references '$s' by path:"
+                echo "VIOLATION: member '$m' couples to '$s':"
                 echo "$hits"
                 viol=1
               fi
             done
           done
-          [ "$viol" = "0" ] && echo "independence OK: no member references a sibling by path"
+          [ "$viol" = "0" ] && echo "independence OK: no member couples to a sibling"
           exit "$viol"
