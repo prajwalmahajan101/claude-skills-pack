@@ -32,7 +32,9 @@ alone.
 > **Pick one hook-install method, not both.** The symlink installers (`install.sh`) and the plugin
 > install (`/plugin install`) are interchangeable — each wires the same hooks, the first via
 > `~/.claude/settings.json`, the second via each plugin's manifest (`plugin.json` → `hooks/hooks.json`).
-> Running **both** for the same skill double-registers its hooks, so they fire twice. Choose the
+> `install.sh` registers hooks through `settings.json` **only** and does not install the plugin
+> manifest into the skill dir, so the symlink installer alone can't double-register. Running **both**
+> methods for the same skill still double-registers its hooks, so they fire twice. Choose the
 > marketplace flow **or** the symlink installer for a given skill; `./uninstall.sh` removes the
 > symlink-install side if you switch.
 
