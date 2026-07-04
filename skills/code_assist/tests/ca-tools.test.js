@@ -272,6 +272,20 @@ test("secretScan --staged reads staged blobs in a repo", () => {
   assert.equal(r.truncated, 0, "no cap by default");
 });
 
+test("secretScan --range scans the range's ref, not the working tree", () => {
+  const d = initRepo();
+  git(d, "commit", "-q", "--allow-empty", "-m", "base");
+  const base = git(d, "rev-parse", "HEAD").stdout.trim();
+  fs.writeFileSync(path.join(d, "cfg.sh"), "KEY=AKIAIOSFODNN7EXAMPLE\n");
+  git(d, "add", "cfg.sh");
+  git(d, "commit", "-q", "-m", "add secret");
+  // Scrub the secret from the working tree — a working-tree read would now miss it.
+  fs.writeFileSync(path.join(d, "cfg.sh"), "KEY=redacted\n");
+  const r = ca.secretScan(["--range", `${base}..HEAD`, "--dir", d]);
+  assert.ok(r.count >= 1 && r.findings.some((x) => x.rule === "aws-access-key"),
+    "secret found from the committed ref despite the scrubbed working tree");
+});
+
 test("secretScan --max-files caps the staged set and reports the truncation", () => {
   const d = initRepo();
   for (let i = 0; i < 4; i++) {
