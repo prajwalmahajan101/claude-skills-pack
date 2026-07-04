@@ -1,0 +1,24 @@
+#!/bin/sh
+# code_assist commit-msg — Conventional Commits lint at the git layer. Disable: CA_DISABLE=1.
+[ "$CA_DISABLE" = "1" ] && exit 0
+
+msg=$(head -1 "$1")
+
+# Allow machine-generated / non-conventional subjects.
+case "$msg" in
+  Merge*|Revert*|fixup!*|squash!*|"") exit 0 ;;
+esac
+
+if ! printf '%s' "$msg" | grep -Eq '^(feat|fix|refactor|docs|test|chore|perf|style|build|ci)(\([^)]+\))?!?: .+'; then
+  echo "commit-msg: not a Conventional Commit." >&2
+  echo "           use  type(scope): subject   where type ∈ feat|fix|refactor|docs|test|chore|perf|style|build|ci" >&2
+  exit 1
+fi
+
+subj=$(printf '%s' "$msg" | sed -E 's/^[a-z]+(\([^)]+\))?!?: //')
+if [ "${#subj}" -gt 72 ]; then
+  echo "commit-msg: subject is ${#subj} chars (>72). Tighten it." >&2
+  exit 1
+fi
+
+exit 0

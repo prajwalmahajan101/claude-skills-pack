@@ -229,6 +229,23 @@ test("secretScan --staged reads staged blobs in a repo", () => {
   assert.ok(r.count >= 1 && r.findings[0].rule === "aws-access-key");
 });
 
+test("installGitHooks is dry-run by default, applies + sets hooksPath, and is idempotent", () => {
+  const d = initRepo();
+  const dry = ca.installGitHooks([d]);
+  assert.equal(dry.apply, false, "dry-run by default");
+  assert.ok(!fs.existsSync(path.join(d, ".githooks", "pre-commit")), "writes nothing on dry-run");
+  const applied = ca.installGitHooks([d, "--apply"]);
+  assert.equal(applied.apply, true);
+  assert.ok(fs.existsSync(path.join(d, ".githooks", "pre-commit")), "pre-commit written");
+  assert.equal((fs.statSync(path.join(d, ".githooks", "pre-commit")).mode & 0o111) !== 0, true, "executable");
+  assert.equal(git(d, "config", "--get", "core.hooksPath").stdout.trim(), ".githooks");
+  const again = ca.installGitHooks([d, "--apply"]);
+  assert.ok(again.planned.every((p) => String(p.action).startsWith("skip")), "idempotent re-apply");
+  const un = ca.uninstallGitHooks([d, "--apply"]);
+  assert.equal(un.unset, true);
+  assert.equal(git(d, "config", "--get", "core.hooksPath").stdout.trim(), "", "hooksPath reverted");
+});
+
 test("envCheck reports missing + extra keys, never values", () => {
   const d = tmp();
   fs.writeFileSync(path.join(d, ".env.example"), "DB_URL=\nAPI_KEY=\nPORT=\n");
