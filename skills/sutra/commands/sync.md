@@ -8,10 +8,12 @@ allowed-tools:
 
 # /sutra:sync
 
-1. Build the vault-ingest payload from the repo's artifacts:
+1. Build the vault-ingest payload from the repo's artifacts. `$ARGUMENTS` carries the optional
+   `[repo path] [--project <slug>]`; when empty, `sync-artifacts` defaults to `.`:
 
    ```bash
-   node ~/.claude/skills/sutra/bin/sutra-tools.js sync-artifacts "${1:-.}" > /tmp/sutra-payload.json
+   PAYLOAD="$(mktemp)"
+   node ~/.claude/skills/sutra/bin/sutra-tools.js sync-artifacts $ARGUMENTS > "$PAYLOAD"
    ```
 
    (Optionally `schema-check` the repo first to confirm the producer's output conforms.)
@@ -19,7 +21,7 @@ allowed-tools:
 2. If **sb** is present, land the payload in the vault:
 
    ```bash
-   node ~/.claude/skills/sb/commands/_runners/ingest.js --payload /tmp/sutra-payload.json
+   node ~/.claude/skills/sb/commands/_runners/ingest.js --payload "$PAYLOAD"
    ```
 
    If sb is absent, the payload is still built (report the counts) — the artifacts remain git-tracked

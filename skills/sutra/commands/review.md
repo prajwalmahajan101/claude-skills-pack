@@ -24,8 +24,8 @@ Compose a review with the pack's memory and code-intelligence around it. Confirm
    `~/.claude/skills/code_assist/code-review/ROUTER.md` and execute it for scope `$ARGUMENTS`. Its
    Step 2.0 runs `graph review-prep` so severity is blast-radius-grounded. Do NOT duplicate its logic.
 3. **Sync (post):** after the review writes `.code_review/` state, land it in the vault —
-   `node ~/.claude/skills/sutra/bin/sutra-tools.js sync-artifacts . > /tmp/p.json` then, if **sb** is
-   present, `node ~/.claude/skills/sb/commands/_runners/ingest.js --payload /tmp/p.json`.
+   `P="$(mktemp)"; node ~/.claude/skills/sutra/bin/sutra-tools.js sync-artifacts . > "$P"` then, if
+   **sb** is present, `node ~/.claude/skills/sb/commands/_runners/ingest.js --payload "$P"`.
 4. **Capture (post):** for any generalizable finding, offer `/sutra:capture "<title>" --risk`.
 
 Report the chain (e.g. "recall(2 risks) → review(3 issues, graph-grounded) → synced → captured 1").
