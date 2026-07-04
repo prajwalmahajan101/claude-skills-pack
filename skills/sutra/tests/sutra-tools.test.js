@@ -281,6 +281,14 @@ test("recall surfaces a warning when a member returns unparseable JSON", () => {
   assert.deepEqual(res.lessons, []);
 });
 
+test("recall tolerates a non-numeric --limit (defaults instead of returning empty)", () => {
+  const root = fakeSkills({ code_assist: "0.6.0" });
+  fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"],
+    'process.stdout.write(JSON.stringify({lessons:[{text:"a"},{text:"b"},{text:"c"}],risks:[],memory:[]}))');
+  const res = withSkills(root, () => sutra.recallFused(["--context", "x", "--limit", "abc"]));
+  assert.equal(res.lessons.length, 3, "NaN limit falls back to the default, not slice(0, NaN) → []");
+});
+
 test("recall surfaces a warning when a member exits non-zero", () => {
   const root = fakeSkills({ code_assist: "0.6.0" });
   fakeMemberCli(root, "code_assist", ["bin", "ca-tools.js"], 'process.exit(3)');

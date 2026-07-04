@@ -60,6 +60,13 @@ function flags(args) {
   return out;
 }
 
+// Parse a numeric flag, falling back to `def` on missing/NaN/non-positive input
+// (e.g. `--limit abc` or `--limit -1` no longer silently yield an empty result).
+function numOr(v, def) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+
 function out(obj, opts = {}) {
   if (opts.text) process.stdout.write(String(obj) + "\n");
   else process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
@@ -296,9 +303,9 @@ function overlap(ctxToks, text) {
 function recallFused(args) {
   const f = flags(args);
   const context = f.context || f._.join(" ") || "";
-  const limit = Number(f.limit || 5);
+  const limit = numOr(f.limit, 5);
   const dir = f.dir || ".";
-  const timeout = Number(f.timeout || 8000);
+  const timeout = numOr(f.timeout, 8000);
   const sources = { code_assist: false, sb: false };
   const warnings = [];
   let lessons = [], risks = [], memory = [];
